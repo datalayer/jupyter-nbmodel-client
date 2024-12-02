@@ -42,22 +42,7 @@ jupyter server extension list
 # Change directory to the jupyter_nbmodel_client directory
 # Install package in development mode - will automatically enable
 # The server extension.
-pip install -e .
-```
-
-
-You can watch the source directory and run your Jupyter Server-based application at the same time in different terminals to watch for changes in the extension's source and automatically rebuild the extension.  For example,
-when running JupyterLab:
-
-```bash
-jupyter lab --autoreload
-```
-
-If your extension does not depend a particular frontend, you can run the
-server directly:
-
-```bash
-jupyter server --autoreload
+pip install -e ".[test,lint,typing]"
 ```
 
 ### Running Tests
@@ -72,12 +57,6 @@ To run the python tests, use:
 
 ```bash
 pytest
-
-# To test a specific file
-pytest jupyter_nbmodel_client/tests/test_handlers.py
-
-# To run a specific test
-pytest jupyter_nbmodel_client/tests/test_handlers.py -k "test_get"
 ```
 
 ### Development uninstall

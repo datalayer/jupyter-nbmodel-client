@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-pip install -e ".[test,lint]"
+pip install -e ".[lint, typing]"
 mypy --install-types --non-interactive .
-ruff .
-black --check --diff .
+ruff check .
 mdformat --check *.md
 pipx run 'validate-pyproject[all]' pyproject.toml
