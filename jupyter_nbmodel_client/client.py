@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import queue
 import typing as t
 from threading import Event, Thread
 from urllib.parse import quote, urlencode
@@ -19,6 +18,7 @@ from pycrdt import (
 from websocket import WebSocket, WebSocketApp
 
 from .constants import HTTP_PROTOCOL_REGEXP, REQUEST_TIMEOUT
+from .model import NotebookModel
 from .utils import fetch, url_path_join
 
 default_logger = logging.getLogger("jupyter_nbmodel_client")
@@ -68,9 +68,12 @@ class NbModelClient:
         """Whether the model is synced or not."""
         return self.__synced.is_set()
 
-    def __enter__(self) -> YNotebook:
+    def __del__(self) -> None:
+        self.stop()
+
+    def __enter__(self) -> NotebookModel:
         self.start()
-        return self.__doc
+        return NotebookModel(self.__doc)
 
     def __exit__(self, exc_type, exc_value, exc_tb) -> None:
         self._log.info("Closing the context")
@@ -84,7 +87,7 @@ class NbModelClient:
             url_path_join(self._server_url, "/api/collaboration/session", quote(self._path)),
             self._token,
             method="PUT",
-            json={"format": "json", "type": "file"},
+            json={"format": "json", "type": "notebook"},
             timeout=self._timeout,
         )
 
@@ -101,7 +104,7 @@ class NbModelClient:
         room_url += "?" + urlencode(params)
         return room_url
 
-    def start(self) -> YNotebook:
+    def start(self) -> NotebookModel:
         """Start the client."""
         if self.__websocket:
             RuntimeError("NbModelClient is already connected.")
@@ -139,7 +142,7 @@ class NbModelClient:
         if self.synced:
             self._log.warning("Document %s not yet synced.", self._path)
 
-        return self.__doc
+        return NotebookModel(self.__doc)
 
     def stop(self) -> None:
         """Stop and reset the client."""
