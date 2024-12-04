@@ -1,9 +1,10 @@
 """Client to interact with Jupyter notebook model."""
 
-from .client import NbModelClient
-from .model import NotebookModel
 from nbformat import NotebookNode
+
+from .client import NbModelClient
+from .model import KernelClient, NotebookModel
 
 __version__ = "0.1.0"
 
-__all__ = ["NbModelClient", "NotebookModel", "NotebookNode"]
+__all__ = ["KernelClient", "NbModelClient", "NotebookModel", "NotebookNode"]

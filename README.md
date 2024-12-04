@@ -4,16 +4,68 @@
 
 Client to interact with Jupyter notebook model.
 
-## Requirements
-
-- Jupyter Server
-
 ## Install
 
 To install the extension, execute:
 
 ```bash
 pip install jupyter_nbmodel_client
+```
+
+## Usage
+
+1. Ensure you have an environment with `jupyter-server-ydoc` installed.
+
+> To reproduce the above video you will need to install `jupyterlab`, `jupyter-collaboration` and `scikit-learn` and `matplotlib` for the notebook demo.
+
+1. Start the server `jupyter server` (or JupyterLab like in the video)
+
+1. Write down the URL (usually `http://localhost:8888`) and the server token
+
+1. Open a Python terminal
+
+1. Execute the following snippet to add a cell
+
+```py
+from jupyter_nbmodel_client import NbModelClient
+
+with NbModelClient(server_url="http://localhost:8888", token="...", path="test.ipynb") as notebook:
+    notebook.add_code_cell("print('hello world')")
+```
+
+1. Another example adding a cell and executing within a kernel process
+
+```py
+from jupyter_kernel_client import KernelClient
+from jupyter_nbmodel_client import NbModelClient
+
+with KernelClient(server_url="http://localhost:8888", token="...") as kernel:
+    with NbModelClient(server_url="http://localhost:8888", token="...", path="test.ipynb") as notebook:
+        cell_index = notebook.add_code_cell("print('hello world')")
+        results = notebook.execute_cell(cell_index, kernel)
+
+        assert results["status"] == "ok"
+        assert len(results["outputs"]) > 0
+```
+
+> [!NOTE]
+> Instead of using the clients as context manager, you can call the ``start()`` and ``stop()`` methods.
+
+```py
+from jupyter_nbmodel_client import NbModelClient
+
+kernel = KernelClient(server_url="http://localhost:8888", token="...")
+kernel.start()
+try:
+    notebook = NbModelClient(server_url="http://localhost:8888", token="...", path="test.ipynb"):
+    notebook.start()
+    try:
+        cell_index = notebook.add_code_cell("print('hello world')")
+        results = notebook.execute_cell(cell_index, kernel)
+    finally:
+        notebook.stop()
+finally:
+    kernel.stop()
 ```
 
 ## Uninstall

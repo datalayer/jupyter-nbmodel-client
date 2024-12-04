@@ -24,7 +24,15 @@ default_logger = logging.getLogger("jupyter_nbmodel_client")
 
 
 class NbModelClient(NotebookModel):
-    """Client to one Jupyter notebook model."""
+    """Client to one Jupyter notebook model.
+
+    Args:
+        server_url: Jupyter Server URL
+        token: Jupyter Server authentication token
+        path: Notebook path relative to the server root directory
+        timeout: Request timeout in seconds; default to environment variable REQUEST_TIMEOUT
+        log: Custom logger
+    """
 
     def __init__(
         self,
