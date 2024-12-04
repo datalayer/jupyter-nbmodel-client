@@ -55,8 +55,8 @@ def output_hook(ycell: pycrdt.Map, msg: dict) -> None:
 
 
 class NotebookModel(MutableSequence):
-    def __init__(self, y_notebook: YNotebook) -> None:
-        self._doc = y_notebook
+    def __init__(self) -> None:
+        self._doc = YNotebook()
 
     def __delitem__(self, index: int) -> NotebookNode:
         raw_ycell = self._doc.ycells.pop(index)
@@ -97,6 +97,10 @@ class NotebookModel(MutableSequence):
         self._doc.append_cell(cell)
 
         return len(self) - 1
+
+    def _reset_y_model(self) -> None:
+        """Reset the Y model."""
+        self._doc = YNotebook()
 
     def execute_cell(self, index: int, kernel_client: t.Any) -> None:
         ycell = t.cast(pycrdt.Map, self._doc.ycells[index])
