@@ -5,7 +5,6 @@ import typing as t
 from threading import Event, Thread
 from urllib.parse import quote, urlencode
 
-from jupyter_ydoc import YNotebook
 from pycrdt import (
     Subscription,
     TransactionEvent,
@@ -24,7 +23,7 @@ from .utils import fetch, url_path_join
 default_logger = logging.getLogger("jupyter_nbmodel_client")
 
 
-class NbModelClient:
+class NbModelClient(NotebookModel):
     """Client to one Jupyter notebook model."""
 
     def __init__(
@@ -35,6 +34,7 @@ class NbModelClient:
         timeout: float = REQUEST_TIMEOUT,
         log: logging.Logger | None = None,
     ) -> None:
+        super().__init__()
         self._server_url = server_url
         self._token = token
         self._path = path
@@ -44,9 +44,8 @@ class NbModelClient:
         self.__connection_thread: Thread | None = None
         self.__connection_ready = Event()
         self.__synced = Event()
-        self.__doc = YNotebook()
         self.__websocket: WebSocketApp | None = None
-        self.__doc_update_subscription: Subscription | None = None
+        self._doc_update_subscription: Subscription | None = None
 
     @property
     def connected(self) -> bool:
@@ -71,9 +70,9 @@ class NbModelClient:
     def __del__(self) -> None:
         self.stop()
 
-    def __enter__(self) -> NotebookModel:
+    def __enter__(self) -> "NbModelClient":
         self.start()
-        return NotebookModel(self.__doc)
+        return self
 
     def __exit__(self, exc_type, exc_value, exc_tb) -> None:
         self._log.info("Closing the context")
@@ -104,7 +103,7 @@ class NbModelClient:
         room_url += "?" + urlencode(params)
         return room_url
 
-    def start(self) -> NotebookModel:
+    def start(self) -> "NbModelClient":
         """Start the client."""
         if self.__websocket:
             RuntimeError("NbModelClient is already connected.")
@@ -121,7 +120,7 @@ class NbModelClient:
         self.__connection_thread = Thread(target=self._run_websocket)
         self.__connection_thread.start()
 
-        self.__doc_update_subscription = self.__doc.ydoc.observe(self._on_doc_update)
+        self._doc_update_subscription = self._doc.ydoc.observe(self._on_doc_update)
 
         self.__connection_ready.wait(timeout=self._timeout)
 
@@ -130,7 +129,7 @@ class NbModelClient:
             emsg = f"Unable to open a websocket connection to {self._server_url} within {self._timeout} s."
             raise TimeoutError(emsg)
 
-        sync_message = create_sync_message(self.__doc.ydoc)
+        sync_message = create_sync_message(self._doc.ydoc)
         self._log.debug(
             "Sending SYNC_STEP1 message for document %s",
             self._path,
@@ -142,17 +141,17 @@ class NbModelClient:
         if self.synced:
             self._log.warning("Document %s not yet synced.", self._path)
 
-        return NotebookModel(self.__doc)
+        return self
 
     def stop(self) -> None:
         """Stop and reset the client."""
         # Reset the notebook
         self._log.info("Disposing NbModelClient…")
 
-        if self.__doc_update_subscription:
-            self.__doc.ydoc.unobserve(self.__doc_update_subscription)
+        if self._doc_update_subscription:
+            self._doc.ydoc.unobserve(self._doc_update_subscription)
         # Reset the model
-        self.__doc = YNotebook()
+        self._reset_y_model()
 
         # Close the websocket
         if self.__websocket:
@@ -187,7 +186,7 @@ class NbModelClient:
                 YSyncMessageType(message[1]).name,
                 self._path,
             )
-            reply = handle_sync_message(message[1:], self.__doc.ydoc)
+            reply = handle_sync_message(message[1:], self._doc.ydoc)
             if message[1] == YSyncMessageType.SYNC_STEP2:
                 self.__synced.set()
             if reply is not None:
