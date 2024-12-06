@@ -132,7 +132,6 @@ class NotebookModel(MutableSequence):
     Its API is based on a mutable sequence of cells.
     """
 
-    # FIXME add notebook metadata
     # FIXME add notebook state (TBC)
 
     def __init__(self) -> None:
@@ -156,6 +155,27 @@ class NotebookModel(MutableSequence):
     def __len__(self) -> int:
         """Number of cells"""
         return self._doc.cell_number
+
+    @property
+    def nbformat(self) -> int:
+        """Notebook format major version."""
+        return int(self._doc._ymeta.get("nbformat"))
+
+    @property
+    def nbformat_minor(self) -> int:
+        """Notebook format minor version."""
+        return int(self._doc._ymeta.get("nbformat_minor"))
+
+    @property
+    def metadata(self) -> dict[str, t.Any]:
+        """Notebook metadata."""
+        return t.cast(pycrdt.Map, self._doc._ymeta["metadata"]).to_py()
+
+    @metadata.setter
+    def metadata(self, value: dict[str, t.Any]) -> None:
+        metadata = t.cast(pycrdt.Map, self._doc._ymeta["metadata"])
+        metadata.clear()
+        metadata.update(value)
 
     def add_code_cell(self, source: str, **kwargs) -> int:
         """Add a code cell
