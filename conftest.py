@@ -1,3 +1,7 @@
+# Copyright (c) 2023-2024 Datalayer, Inc.
+#
+# BSD 3-Clause License
+
 import pytest
 
 pytest_plugins = ["jupyter_server.pytest_plugin", "jupyter_server_ydoc.pytest_plugin"]

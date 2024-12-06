@@ -1,3 +1,7 @@
+# Copyright (c) 2023-2024 Datalayer, Inc.
+#
+# BSD 3-Clause License
+
 """Client to interact with Jupyter notebook model."""
 
 from nbformat import NotebookNode
