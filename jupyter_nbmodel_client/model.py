@@ -202,6 +202,14 @@ class NotebookModel(MutableSequence):
 
         return len(self) - 1
 
+    def as_dict(self) -> dict[str, t.Any]:
+        """Export the notebook as dictionary.
+
+        Returns:
+            The dictionary
+        """
+        return self._doc.source
+
     def execute_cell(self, index: int, kernel_client: KernelClient) -> dict:
         """Execute a cell given by its index with the provided kernel client.
 

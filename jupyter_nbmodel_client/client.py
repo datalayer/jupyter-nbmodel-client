@@ -161,7 +161,12 @@ class NbModelClient(NotebookModel):
         self._log.info("Disposing NbModelClient…")
 
         if self._doc_update_subscription:
-            self._doc.ydoc.unobserve(self._doc_update_subscription)
+            try:
+                self._doc.ydoc.unobserve(self._doc_update_subscription)
+            except ValueError as e:
+                if str(e) != "list.remove(x): x not in list":
+                    self._log.error("Failed to unobserve the notebook model.", exc_info=e)
+
         # Reset the model
         self._reset_y_model()
 
