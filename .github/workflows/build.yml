@@ -37,14 +37,15 @@ jobs:
         run: |
           pip install build
           python -m build --sdist
-          cp dist/*.tar.gz my_server_extension.tar.gz
-          pip uninstall -y "jupyter_kernel_client"
-          rm -rf "jupyter_kernel_client"
+          cp dist/*.tar.gz my_package.tar.gz
+          pip uninstall -y "jupyter_nbmodel_client"
+          rm -rf "jupyter_nbmodel_client"
 
       - uses: actions/upload-artifact@v4
+        if: startsWith(matrix.os, 'ubuntu')
         with:
-          name: my_server_extension-sdist
-          path: my_server_extension.tar.gz
+          name: my_package-sdist-${{ matrix.python-version }}
+          path: my_package.tar.gz
 
   check_links:
     runs-on: ubuntu-latest
@@ -65,6 +66,9 @@ jobs:
   test_sdist:
     needs: build
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.13"]
 
     steps:
       - name: Checkout
@@ -72,16 +76,16 @@ jobs:
       - name: Install Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           architecture: "x64"
       - uses: actions/download-artifact@v4
         with:
-          name: my_server_extension-sdist
+          name: my_package-sdist-${{ matrix.python-version }}
       - name: Install and Test
         run: |
-          pip install my_server_extension.tar.gz
-          pip list 2>&1 | grep -ie "jupyter_kernel_client"
-          python -c "import jupyter_kernel_client"
+          pip install my_package.tar.gz
+          pip list 2>&1 | grep -ie "jupyter_nbmodel_client"
+          python -c "import jupyter_nbmodel_client"
 
   check_release:
     needs: test_sdist
@@ -100,5 +104,5 @@ jobs:
       - name: Upload Distributions
         uses: actions/upload-artifact@v4
         with:
-          name: jupyter_kernel_client-releaser-dist-${{ github.run_number }}
+          name: jupyter_nbmodel_client-releaser-dist-${{ github.run_number }}
           path: .jupyter_releaser_checkout/dist
