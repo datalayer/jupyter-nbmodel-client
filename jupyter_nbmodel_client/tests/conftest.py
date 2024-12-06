@@ -11,14 +11,17 @@ import nbformat
 import pytest
 import requests
 
-LOG = {b"C": logging.critical, b"W": logging.warning, b"I": logging.info, b"D": logging.debug}
-
 
 def find_free_port():
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
         s.bind(("localhost", 0))
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         return s.getsockname()[1]
+
+
+def print_stream(stream):
+    for line in stream.split(b"\n"):
+        print(line.decode())
 
 
 @pytest.fixture
@@ -69,21 +72,19 @@ def jupyter_server(tmp_path) -> t.Generator[tuple[str, str], t.Any, t.Any]:
     finally:
         jp_server.send_signal(signal.SIGINT)
         jp_server.send_signal(signal.SIGINT)
+        failed_to_terminate = True
         try:
             out, err = jp_server.communicate(timeout=5)
-
-            def print_stream(stream):
-                for line in stream.split(b"\n"):
-                    if len(line) >= 2 and line[0] == b"[":
-                        LOG.get(line[1], logging.debug)(line.decode())
-                    else:
-                        logging.info(line.decode())
-
+            failed_to_terminate = False
             print_stream(out)
             print_stream(err)
         except TimeoutExpired:
             if jp_server.poll() is None:
                 jp_server.terminate()
+
+        if failed_to_terminate:
+            print_stream(b"".join(iter(jp_server.stdout.readline, b"")))
+            print_stream(b"".join(iter(jp_server.stderr.readline, b"")))
 
 
 @pytest.fixture
