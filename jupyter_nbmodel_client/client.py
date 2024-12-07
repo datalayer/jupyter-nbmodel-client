@@ -1,3 +1,7 @@
+# Copyright (c) 2023-2024 Datalayer, Inc.
+#
+# BSD 3-Clause License
+
 from __future__ import annotations
 
 import logging
@@ -111,7 +115,7 @@ class NbModelClient(NotebookModel):
         room_url += "?" + urlencode(params)
         return room_url
 
-    def start(self) -> "NbModelClient":
+    def start(self) -> None:
         """Start the client."""
         if self.__websocket:
             RuntimeError("NbModelClient is already connected.")
@@ -149,15 +153,18 @@ class NbModelClient(NotebookModel):
         if self.synced:
             self._log.warning("Document %s not yet synced.", self._path)
 
-        return self
-
     def stop(self) -> None:
         """Stop and reset the client."""
         # Reset the notebook
         self._log.info("Disposing NbModelClient…")
 
         if self._doc_update_subscription:
-            self._doc.ydoc.unobserve(self._doc_update_subscription)
+            try:
+                self._doc.ydoc.unobserve(self._doc_update_subscription)
+            except ValueError as e:
+                if str(e) != "list.remove(x): x not in list":
+                    self._log.error("Failed to unobserve the notebook model.", exc_info=e)
+
         # Reset the model
         self._reset_y_model()
 

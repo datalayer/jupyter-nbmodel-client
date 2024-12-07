@@ -1,3 +1,9 @@
+<!--
+  ~ Copyright (c) 2023-2024 Datalayer, Inc.
+  ~
+  ~ BSD 3-Clause License
+-->
+
 # jupyter_nbmodel_client
 
 [![Github Actions Status](https://github.com/datalayer/jupyter-nbmodel-client/workflows/Build/badge.svg)](https://github.com/datalayer/jupyter-nbmodel-client/actions/workflows/build.yml)
