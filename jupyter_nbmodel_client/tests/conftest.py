@@ -2,6 +2,8 @@
 #
 # BSD 3-Clause License
 
+from __future__ import annotations
+
 import logging
 import secrets
 import signal
