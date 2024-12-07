@@ -115,7 +115,7 @@ class NbModelClient(NotebookModel):
         room_url += "?" + urlencode(params)
         return room_url
 
-    def start(self) -> "NbModelClient":
+    def start(self) -> None:
         """Start the client."""
         if self.__websocket:
             RuntimeError("NbModelClient is already connected.")
@@ -152,8 +152,6 @@ class NbModelClient(NotebookModel):
         self.__synced.wait(REQUEST_TIMEOUT)
         if self.synced:
             self._log.warning("Document %s not yet synced.", self._path)
-
-        return self
 
     def stop(self) -> None:
         """Stop and reset the client."""
