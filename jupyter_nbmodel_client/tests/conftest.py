@@ -80,7 +80,7 @@ def jupyter_server(tmp_path) -> t.Generator[tuple[str, str], t.Any, t.Any]:
         jp_server.send_signal(signal.SIGINT)
         failed_to_terminate = True
         try:
-            out, err = jp_server.communicate(timeout=5)
+            out, err = jp_server.communicate(timeout=10)
             failed_to_terminate = False
             print_stream(out)
             print_stream(err)
@@ -88,9 +88,9 @@ def jupyter_server(tmp_path) -> t.Generator[tuple[str, str], t.Any, t.Any]:
             if jp_server.poll() is None:
                 jp_server.terminate()
 
-        if failed_to_terminate:
-            print_stream(b"".join(iter(jp_server.stdout.readline, b"")))
-            print_stream(b"".join(iter(jp_server.stderr.readline, b"")))
+        # if failed_to_terminate:
+        #     print_stream(b"".join(iter(jp_server.stdout.readline, b"")))
+        #     print_stream(b"".join(iter(jp_server.stderr.readline, b"")))
 
 
 @pytest.fixture
