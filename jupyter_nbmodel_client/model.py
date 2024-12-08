@@ -1,6 +1,13 @@
-import os
+# Copyright (c) 2023-2024 Datalayer, Inc.
+#
+# BSD 3-Clause License
+
+from __future__ import annotations
+
+import logging
 import typing as t
 from collections.abc import MutableSequence
+from copy import deepcopy
 from functools import partial
 
 import nbformat
@@ -8,7 +15,37 @@ import pycrdt
 from jupyter_ydoc import YNotebook
 from nbformat import NotebookNode, current_nbformat, versions
 
+try:
+    from jupyter_kernel_client.client import output_hook
+except ImportError:
+
+    def output_hook(outputs: list[dict[str, t.Any]], message: dict[str, t.Any]) -> set[int]:
+        # This is a very simple version - we highly recommend
+        # having `jupyter_kernel_client` installed
+        msg_type = message["header"]["msg_type"]
+        if msg_type == "update_display_data":
+            message = deepcopy(message)
+            msg_type = "display_data"
+            message["header"]["msg_type"] = msg_type
+
+        if msg_type in ("display_data", "stream", "execute_result", "error"):
+            output = nbformat.v4.output_from_msg(message)
+            index = len(outputs)
+            outputs.append(output)
+            return {index}
+
+        elif msg_type == "clear_output":
+            size = len(outputs)
+            outputs.clear()
+            return set(range(size))
+
+        return set()
+
+
 current_api = versions[current_nbformat]
+
+
+logger = logging.getLogger("jupyter_nbmodel_client")
 
 
 class KernelClient(t.Protocol):
@@ -74,7 +111,7 @@ class KernelClient(t.Protocol):
         ...
 
 
-def output_hook(outputs: list[dict], ycell: pycrdt.Map, msg: dict) -> None:
+def save_in_notebook_hook(outputs: list[dict], ycell: pycrdt.Map, msg: dict) -> None:
     """Callback on execution request when an output is emitted.
 
     Args:
@@ -82,44 +119,18 @@ def output_hook(outputs: list[dict], ycell: pycrdt.Map, msg: dict) -> None:
         ycell: The cell being executed
         msg: The output message
     """
-    # FIXME converge with output_hook in KernelClient
-    msg_type = msg["header"]["msg_type"]
-    if msg_type in ("display_data", "stream", "execute_result", "error"):
-        # FIXME support for version
-        output = nbformat.v4.output_from_msg(msg)
-        outputs.append(output)
-
-        if ycell is not None:
-            cell_outputs = ycell["outputs"]
-            if msg_type == "stream":
-                with cell_outputs.doc.transaction():
-                    text = output["text"]
-
-                    # FIXME Logic is quite complex at https://github.com/jupyterlab/jupyterlab/blob/7ae2d436fc410b0cff51042a3350ba71f54f4445/packages/outputarea/src/model.ts#L518
-                    if text.endswith((os.linesep, "\n")):
-                        text = text[:-1]
-
-                    if (not cell_outputs) or (cell_outputs[-1]["name"] != output["name"]):
-                        output["text"] = [text]
-                        cell_outputs.append(output)
-                    else:
-                        last_output = cell_outputs[-1]
-                        last_output["text"].append(text)
-                        cell_outputs[-1] = last_output
+    indexes = output_hook(outputs, msg)
+    cell_outputs = t.cast(pycrdt.Array, ycell["outputs"])
+    if len(indexes) == len(cell_outputs):
+        with cell_outputs.doc.transaction():
+            cell_outputs.clear()
+            cell_outputs.extend(outputs)
+    else:
+        for index in indexes:
+            if index >= len(cell_outputs):
+                cell_outputs.append(outputs[index])
             else:
-                with cell_outputs.doc.transaction():
-                    cell_outputs.append(output)
-
-    elif msg_type == "clear_output":
-        # msg.content.wait is ignored - if true should clear at the next message
-        # FIXME this is to fake some animation do we care? --> probably yes if output is captured
-        # in the server
-        outputs.clear()
-        del ycell["outputs"][:]
-
-    elif msg_type == "update_display_data":
-        # FIXME
-        ...
+                cell_outputs[index] = outputs[index]
 
 
 class NotebookModel(MutableSequence):
@@ -128,8 +139,8 @@ class NotebookModel(MutableSequence):
     Its API is based on a mutable sequence of cells.
     """
 
-    # FIXME add notebook metadata
     # FIXME add notebook state (TBC)
+    # FIXME add API to clear code cell; aka execution count and outputs
 
     def __init__(self) -> None:
         self._doc = YNotebook()
@@ -152,6 +163,28 @@ class NotebookModel(MutableSequence):
     def __len__(self) -> int:
         """Number of cells"""
         return self._doc.cell_number
+
+    @property
+    def nbformat(self) -> int:
+        """Notebook format major version."""
+        return int(self._doc._ymeta.get("nbformat"))
+
+    @property
+    def nbformat_minor(self) -> int:
+        """Notebook format minor version."""
+        return int(self._doc._ymeta.get("nbformat_minor"))
+
+    @property
+    def metadata(self) -> dict[str, t.Any]:
+        """Notebook metadata."""
+        return t.cast(pycrdt.Map, self._doc._ymeta["metadata"]).to_py()
+
+    @metadata.setter
+    def metadata(self, value: dict[str, t.Any]) -> None:
+        metadata = t.cast(pycrdt.Map, self._doc._ymeta["metadata"])
+        with metadata.doc.transaction():
+            metadata.clear()
+            metadata.update(value)
 
     def add_code_cell(self, source: str, **kwargs) -> int:
         """Add a code cell
@@ -198,6 +231,14 @@ class NotebookModel(MutableSequence):
 
         return len(self) - 1
 
+    def as_dict(self) -> dict[str, t.Any]:
+        """Export the notebook as dictionary.
+
+        Returns:
+            The dictionary
+        """
+        return self._doc.source
+
     def execute_cell(self, index: int, kernel_client: KernelClient) -> dict:
         """Execute a cell given by its index with the provided kernel client.
 
@@ -212,6 +253,13 @@ class NotebookModel(MutableSequence):
 
             The outputs will follow the structure of nbformat outputs.
         """
+        try:
+            import jupyter_kernel_client
+        except ImportError:
+            logger.warning(
+                "We recommend installing `jupyter_kernel_client` for a better execution behavior."
+            )
+
         ycell = t.cast(pycrdt.Map, self._doc.ycells[index])
         source = ycell["source"].to_py()
 
@@ -222,15 +270,17 @@ class NotebookModel(MutableSequence):
             ycell["execution_state"] = "running"
 
         outputs = []
-        reply = kernel_client.execute_interactive(
-            source, output_hook=partial(output_hook, outputs, ycell), allow_stdin=False
-        )
+        reply_content = {}
+        try:
+            reply = kernel_client.execute_interactive(
+                source, output_hook=partial(save_in_notebook_hook, outputs, ycell), allow_stdin=False
+            )
 
-        reply_content = reply["content"]
-
-        with ycell.doc.transaction():
-            ycell["execution_count"] = reply_content.get("execution_count")
-            ycell["execution_state"] = "idle"
+            reply_content = reply["content"]
+        finally:
+            with ycell.doc.transaction():
+                ycell["execution_count"] = reply_content.get("execution_count")
+                ycell["execution_state"] = "idle"
 
         return {
             "execution_count": reply_content.get("execution_count"),
@@ -247,6 +297,15 @@ class NotebookModel(MutableSequence):
         """
         ycell = self._doc.create_ycell(value)
         self._doc.ycells.insert(index, ycell)
+
+    def set_cell_source(self, index: int, source: str) -> None:
+        """Set a cell source.
+
+        Args:
+            index: Cell index
+            source: New cell source
+        """
+        self._doc._ycells[index].set("source", source)
 
     def _reset_y_model(self) -> None:
         """Reset the Y model."""
