@@ -4,16 +4,17 @@
 
 from __future__ import annotations
 
-import logging
 import typing as t
+import warnings
 from collections.abc import MutableSequence
 from copy import deepcopy
 from functools import partial
 
-import nbformat
 import pycrdt
 from jupyter_ydoc import YNotebook
 from nbformat import NotebookNode, current_nbformat, versions
+
+current_api = versions[current_nbformat]
 
 try:
     from jupyter_kernel_client.client import output_hook
@@ -29,7 +30,7 @@ except ImportError:
             message["header"]["msg_type"] = msg_type
 
         if msg_type in ("display_data", "stream", "execute_result", "error"):
-            output = nbformat.v4.output_from_msg(message)
+            output = current_api.output_from_msg(message)
             index = len(outputs)
             outputs.append(output)
             return {index}
@@ -42,13 +43,11 @@ except ImportError:
         return set()
 
 
-current_api = versions[current_nbformat]
-
-
-logger = logging.getLogger("jupyter_nbmodel_client")
 
 
 class KernelClient(t.Protocol):
+    """Interface to be implemented by the kernel client."""
+
     def execute_interactive(
         self,
         code: str,
@@ -63,49 +62,28 @@ class KernelClient(t.Protocol):
     ) -> dict[str, t.Any]:
         """Execute code in the kernel with low-level API
 
-        Output will be redisplayed, and stdin prompts will be relayed as well.
+        Args:
+            code: A string of code in the kernel's language.
+            silent: optional (default False)
+                If set, the kernel will execute the code as quietly possible, and
+                will force store_history to be False.
+            store_history: optional (default True)
+                If set, the kernel will store command history.  This is forced
+                to be False if silent is True.
+            user_expressions: optional
+                A dict mapping names to expressions to be evaluated in the user's
+                dict. The expression values are returned as strings formatted using
+                :func:`repr`.
+            allow_stdin: optional (default self.allow_stdin)
+                Flag for whether the kernel can send stdin requests to frontends.
+            stop_on_error: optional (default True)
+                Flag whether to abort the execution queue, if an exception is encountered.
+            timeout: (default None)
+                Timeout to use when waiting for a reply
+            output_hook: Function to be called with output messages.
+            stdin_hook: Function to be called with stdin_request messages.
 
-        You can pass a custom output_hook callable that will be called
-        with every IOPub message that is produced instead of the default redisplay.
-
-        Parameters
-        ----------
-        code : str
-            A string of code in the kernel's language.
-
-        silent : bool, optional (default False)
-            If set, the kernel will execute the code as quietly possible, and
-            will force store_history to be False.
-
-        store_history : bool, optional (default True)
-            If set, the kernel will store command history.  This is forced
-            to be False if silent is True.
-
-        user_expressions : dict, optional
-            A dict mapping names to expressions to be evaluated in the user's
-            dict. The expression values are returned as strings formatted using
-            :func:`repr`.
-
-        allow_stdin : bool, optional (default self.allow_stdin)
-            Flag for whether the kernel can send stdin requests to frontends.
-
-        stop_on_error: bool, optional (default True)
-            Flag whether to abort the execution queue, if an exception is encountered.
-
-        timeout: float or None (default: None)
-            Timeout to use when waiting for a reply
-
-        output_hook: callable(msg)
-            Function to be called with output messages.
-            If not specified, output will be redisplayed.
-
-        stdin_hook: callable(msg)
-            Function to be called with stdin_request messages.
-            If not specified, input/getpass will be called.
-
-        Returns
-        -------
-        reply: dict
+        Returns:
             The reply message for this request
         """
         ...
@@ -239,7 +217,15 @@ class NotebookModel(MutableSequence):
         """
         return self._doc.source
 
-    def execute_cell(self, index: int, kernel_client: KernelClient) -> dict:
+    def execute_cell(
+        self,
+        index: int,
+        kernel_client: KernelClient,
+        silent: bool = False,
+        store_history: bool = True,
+        stop_on_error: bool = True,
+        timeout: float | None = None,
+    ) -> dict:
         """Execute a cell given by its index with the provided kernel client.
 
         The outputs will directly be stored within the notebook model.
@@ -247,6 +233,16 @@ class NotebookModel(MutableSequence):
         Args:
             index: Index of the cell to be executed
             kernel_client: Kernel client to use
+            silent: optional (default False)
+                If set, the kernel will execute the code as quietly possible, and
+                will force store_history to be False.
+            store_history: optional (default True)
+                If set, the kernel will store command history.  This is forced
+                to be False if silent is True.
+            stop_on_error: optional (default True)
+                Flag whether to abort the execution queue, if an exception is encountered.
+            timeout: (default None)
+                Timeout to use when waiting for a reply
 
         Returns:
             Execution results {"execution_count": int | None, "status": str, "outputs": list[dict]}
@@ -256,8 +252,9 @@ class NotebookModel(MutableSequence):
         try:
             import jupyter_kernel_client
         except ImportError:
-            logger.warning(
-                "We recommend installing `jupyter_kernel_client` for a better execution behavior."
+            warnings.warn(
+                "We recommend installing `jupyter_kernel_client` for a better execution behavior.",
+                stacklevel=2,
             )
 
         ycell = t.cast(pycrdt.Map, self._doc.ycells[index])
@@ -273,7 +270,13 @@ class NotebookModel(MutableSequence):
         reply_content = {}
         try:
             reply = kernel_client.execute_interactive(
-                source, output_hook=partial(save_in_notebook_hook, outputs, ycell), allow_stdin=False
+                source,
+                output_hook=partial(save_in_notebook_hook, outputs, ycell),
+                allow_stdin=False,
+                silent=silent,
+                store_history=False if silent else store_history,
+                stop_on_error=stop_on_error,
+                timeout=timeout,
             )
 
             reply_content = reply["content"]

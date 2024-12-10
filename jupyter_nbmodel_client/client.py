@@ -150,7 +150,7 @@ class NbModelClient(NotebookModel):
 
         self._log.debug("Waiting for model synchronization…")
         self.__synced.wait(REQUEST_TIMEOUT)
-        if self.synced:
+        if not self.synced:
             self._log.warning("Document %s not yet synced.", self._path)
 
     def stop(self) -> None:
