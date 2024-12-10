@@ -8,6 +8,26 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## 0.3.0
+
+([Full Changelog](https://github.com/datalayer/jupyter-nbmodel-client/compare/v0.2.0...cfc7a804957b777900c105cada76993ce0f6d0c0))
+
+### Enhancements made
+
+- Add execution options [#11](https://github.com/datalayer/jupyter-nbmodel-client/pull/11) ([@fcollonval](https://github.com/fcollonval))
+
+### Documentation improvements
+
+- Add pypi badge [#10](https://github.com/datalayer/jupyter-nbmodel-client/pull/10) ([@fcollonval](https://github.com/fcollonval))
+
+### Contributors to this release
+
+([GitHub contributors page for this release](https://github.com/datalayer/jupyter-nbmodel-client/graphs/contributors?from=2024-12-09&to=2024-12-10&type=c))
+
+[@fcollonval](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Afcollonval+updated%3A2024-12-09..2024-12-10&type=Issues)
+
+<!-- <END NEW CHANGELOG ENTRY> -->
+
 ## 0.2.0
 
 ([Full Changelog](https://github.com/datalayer/jupyter-nbmodel-client/compare/v0.1.1...590550c1b7d76656f10a0ad59b133d5fe6ab5556))
@@ -25,8 +45,6 @@
 ([GitHub contributors page for this release](https://github.com/datalayer/jupyter-nbmodel-client/graphs/contributors?from=2024-12-04&to=2024-12-08&type=c))
 
 [@dependabot](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Adependabot+updated%3A2024-12-04..2024-12-08&type=Issues) | [@fcollonval](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Afcollonval+updated%3A2024-12-04..2024-12-08&type=Issues)
-
-<!-- <END NEW CHANGELOG ENTRY> -->
 
 ## 0.1.1
 
