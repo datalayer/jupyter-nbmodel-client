@@ -4,16 +4,18 @@
   ~ BSD 3-Clause License
 -->
 
-# jupyter_nbmodel_client
+[![Datalayer](https://assets.datalayer.tech/datalayer-25.svg)](https://datalayer.io)
+
+[![Become a Sponsor](https://img.shields.io/static/v1?label=Become%20a%20Sponsor&message=%E2%9D%A4&logo=GitHub&style=flat&color=1ABC9C)](https://github.com/sponsors/datalayer)
+
+# Jupyter NbModel Client
 
 [![Github Actions Status](https://github.com/datalayer/jupyter-nbmodel-client/workflows/Build/badge.svg)](https://github.com/datalayer/jupyter-nbmodel-client/actions/workflows/build.yml)
 [![PyPI - Version](https://img.shields.io/pypi/v/jupyter-nbmodel-client)](https://pypi.org/project/jupyter-nbmodel-client)
 
-Client to interact with Jupyter notebook model.
+Client to interact with a Jupyter Notebook model.
 
-## Install
-
-To install the extension, execute:
+To install the library, run the following command.
 
 ```bash
 pip install jupyter_nbmodel_client
@@ -21,33 +23,37 @@ pip install jupyter_nbmodel_client
 
 ## Usage
 
-1. Ensure you have an environment with `jupyter-server-ydoc` installed.
+1. Ensure you have the needed packages in your environment to run the example here after.
 
-> To reproduce the above video you will need to install `jupyterlab`, `jupyter-collaboration` and `scikit-learn` and `matplotlib` for the notebook demo.
+```sh
+pip install jupyterlab jupyter-collaboration ipykernel matplotlib
+```
 
-1. Start the server `jupyter server` (or JupyterLab like in the video)
+2. Start a JupyterLab server, setting a `port` and a `token` to be reused by the agent, and create a notebook `test.ipynb`.
 
-1. Write down the URL (usually `http://localhost:8888`) and the server token
+```sh
+jupyter lab --port 8888 --IdentityProvider.token MY_TOKEN
+```
 
-1. Open a Python terminal
-
-1. Execute the following snippet to add a cell
+3. Open a Python REPL and execute the following snippet to add a cell.
 
 ```py
 from jupyter_nbmodel_client import NbModelClient
 
-with NbModelClient(server_url="http://localhost:8888", token="...", path="test.ipynb") as notebook:
+with NbModelClient(server_url="http://localhost:8888", token="MY_TOKEN", path="test.ipynb") as notebook:
     notebook.add_code_cell("print('hello world')")
 ```
 
-1. Another example adding a cell and executing within a kernel process
+> Check `test.ipynb` in JupyterLab.
+
+5. The previous example does not involve kernels. Put that now in the picture, adding a cell and executing within a kernel process.
 
 ```py
 from jupyter_kernel_client import KernelClient
 from jupyter_nbmodel_client import NbModelClient
 
-with KernelClient(server_url="http://localhost:8888", token="...") as kernel:
-    with NbModelClient(server_url="http://localhost:8888", token="...", path="test.ipynb") as notebook:
+with KernelClient(server_url="http://localhost:8888", token="MY_TOKEN") as kernel:
+    with NbModelClient(server_url="http://localhost:8888", token="MY_TOKEN", path="test.ipynb") as notebook:
         cell_index = notebook.add_code_cell("print('hello world')")
         results = notebook.execute_cell(cell_index, kernel)
 
@@ -55,16 +61,55 @@ with KernelClient(server_url="http://localhost:8888", token="...") as kernel:
         assert len(results["outputs"]) > 0
 ```
 
+> Check `test.ipynb` in JupyterLab.
+
+You can go further and create a plot with Matplotlib.
+
+```py
+from jupyter_kernel_client import KernelClient
+from jupyter_nbmodel_client import NbModelClient
+
+CODE = """import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots()
+
+fruits = ['apple', 'blueberry', 'cherry', 'orange']
+counts = [40, 100, 30, 55]
+bar_labels = ['red', 'blue', '_red', 'orange']
+bar_colors = ['tab:red', 'tab:blue', 'tab:red', 'tab:orange']
+
+ax.bar(fruits, counts, label=bar_labels, color=bar_colors)
+
+ax.set_ylabel('fruit supply')
+ax.set_title('Fruit supply by kind and color')
+ax.legend(title='Fruit color')
+
+plt.show()
+"""
+
+with KernelClient(server_url="http://localhost:8888", token="MY_TOKEN") as kernel:
+    with NbModelClient(server_url="http://localhost:8888", token="MY_TOKEN", path="test.ipynb") as notebook:
+        cell_index = notebook.add_code_cell(CODE)
+        results = notebook.execute_cell(cell_index, kernel)
+
+        assert results["status"] == "ok"
+        assert len(results["outputs"]) > 0
+```
+
+> Check `test.ipynb` in JupyterLab.
+
 > [!NOTE]
+>
 > Instead of using the clients as context manager, you can call the ``start()`` and ``stop()`` methods.
 
 ```py
 from jupyter_nbmodel_client import NbModelClient
 
-kernel = KernelClient(server_url="http://localhost:8888", token="...")
+kernel = KernelClient(server_url="http://localhost:8888", token="MY_TOKEN")
 kernel.start()
+
 try:
-    notebook = NbModelClient(server_url="http://localhost:8888", token="...", path="test.ipynb"):
+    notebook = NbModelClient(server_url="http://localhost:8888", token="MY_TOKEN", path="test.ipynb"):
     notebook.start()
     try:
         cell_index = notebook.add_code_cell("print('hello world')")
@@ -77,19 +122,10 @@ finally:
 
 ## Uninstall
 
-To remove the extension, execute:
+To remove the library, run the following.
 
 ```bash
 pip uninstall jupyter_nbmodel_client
-```
-
-## Troubleshoot
-
-If you are seeing the frontend extension, but it is not working, check
-that the server extension is enabled:
-
-```bash
-jupyter server extension list
 ```
 
 ## Contributing
@@ -124,6 +160,6 @@ pytest
 pip uninstall jupyter_nbmodel_client
 ```
 
-### Packaging the extension
+### Packaging the library
 
 See [RELEASE](RELEASE.md)
