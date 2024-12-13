@@ -43,8 +43,6 @@ except ImportError:
         return set()
 
 
-
-
 class KernelClient(t.Protocol):
     """Interface to be implemented by the kernel client."""
 
@@ -121,7 +119,9 @@ class NotebookModel(MutableSequence):
     # FIXME add API to clear code cell; aka execution count and outputs
 
     def __init__(self) -> None:
-        self._doc = YNotebook()
+        self._doc: YNotebook
+        # Initialize _doc
+        self._reset_y_model()
 
     def __delitem__(self, index: int) -> NotebookNode:
         raw_ycell = self._doc.ycells.pop(index)
@@ -312,4 +312,6 @@ class NotebookModel(MutableSequence):
 
     def _reset_y_model(self) -> None:
         """Reset the Y model."""
-        self._doc = YNotebook()
+        # Use allow_multithreading=True to ensure blocking document transactions
+        # https://jupyter-server.github.io/pycrdt/usage/#Transactions
+        self._doc = YNotebook(ydoc=pycrdt.Doc(allow_multithreading=True))
