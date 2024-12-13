@@ -5,9 +5,11 @@
 from __future__ import annotations
 
 import logging
+import os
 import secrets
 import signal
 import socket
+import time
 import typing as t
 from contextlib import closing
 from pathlib import Path
@@ -16,7 +18,9 @@ from subprocess import PIPE, Popen, TimeoutExpired
 import nbformat
 import pytest
 import requests
+from websocket import enableTrace
 
+# enableTrace(True)
 
 def find_free_port():
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
@@ -48,32 +52,38 @@ def jupyter_server(tmp_path) -> t.Generator[tuple[str, str], t.Any, t.Any]:
             "--IdentityProvider.token",
             token,
             "--debug",
+            # "--ServerApp.logging_config",
+            # r'{"version":1,"handlers":{"logfile":{"class":"logging.FileHandler","level":"DEBUG","filename":"jupyter_server.log"}},"loggers":{"ServerApp":{"level":"DEBUG","handlers":["logfile"]}}}'
             "--ServerApp.open_browser",
             "False",
-            "--SQLiteYStore.db_path",
-            str(tmp_path / "crdt.db"),
-            "--BaseFileIdManager.root_dir",
-            str(tmp_path),
-            "--BaseFileIdManager.db_path",
-            str(tmp_path / "file_id.db"),
-            "--BaseFileIdManager.db_journal_mode",
-            "OFF",
-            str(tmp_path),
+            # "--SQLiteYStore.db_path",
+            # str(tmp_path / "crdt.db"),
+            # "--BaseFileIdManager.root_dir",
+            # str(tmp_path),
+            # "--BaseFileIdManager.db_path",
+            # str(tmp_path / "file_id.db"),
+            # "--BaseFileIdManager.db_journal_mode",
+            # "OFF",
+            # str(tmp_path),
         ],
         stdout=PIPE,
         stderr=PIPE,
+        cwd=tmp_path,
     )
 
-    starting = True
-    while starting:
-        try:
-            ans = requests.get(f"http://localhost:{port}/api", timeout=1)
-            if ans.status_code == 200:
-                logging.debug("Server ready at http://localhost:%s", port)
-                break
-        except requests.RequestException:
-            ...
     try:
+        starting = True
+        while starting:
+            try:
+                ans = requests.get(f"http://localhost:{port}/api", timeout=1)
+                time.sleep(1)
+                if ans.status_code == 200:
+                    logging.debug("Server ready at http://localhost:%s", port)
+                    break
+            except requests.RequestException:
+                ...
+
+        logging.basicConfig(level=logging.DEBUG)
         yield (f"http://localhost:{port}", token)
     finally:
         jp_server.send_signal(signal.SIGINT)
@@ -88,9 +98,14 @@ def jupyter_server(tmp_path) -> t.Generator[tuple[str, str], t.Any, t.Any]:
             if jp_server.poll() is None:
                 jp_server.terminate()
 
-        # if failed_to_terminate:
-        #     print_stream(b"".join(iter(jp_server.stdout.readline, b"")))
-        #     print_stream(b"".join(iter(jp_server.stderr.readline, b"")))
+    #     if failed_to_terminate:
+    #         print((tmp_path / "jupyter_server.log").read_text())
+    #         # if not jp_server.stdout.closed:
+    #         #     jp_server.stdout.close()
+    #         # if not jp_server.stderr.closed:
+    #         #     jp_server.stderr.close()
+    #         # print_stream(b"\n".join(iter(jp_server.stdout.readline, b"")))
+    #         # print_stream(b"\n".join(iter(jp_server.stderr.readline, b"")))
 
 
 @pytest.fixture
@@ -104,7 +119,8 @@ def notebook_factory(tmp_path):
             msg = "File extension for notebook must be .ipynb"
             raise ValueError(msg)
 
-        nbpath = tmp_path / path_
+        # nbpath = tmp_path / path_
+        nbpath = Path(os.environ.get("JUPYTER_SERVER_ROOTDIR", tmp_path)) / path_
         # If the notebook path has a parent directory, make sure it's created.
         nbpath.parent.mkdir(parents=True, exist_ok=True)
 

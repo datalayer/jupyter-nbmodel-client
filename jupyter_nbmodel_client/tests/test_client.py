@@ -2,11 +2,16 @@
 #
 # BSD 3-Clause License
 
+import os
+
 from jupyter_nbmodel_client import NbModelClient
 
 
-def test_create_notebook_context_manager(jupyter_server, notebook_factory):
-    server_url, token = jupyter_server
+def test_create_notebook_context_manager(notebook_factory):
+# def test_create_notebook_context_manager(jupyter_server, notebook_factory):
+#     server_url, token = jupyter_server
+    server_url = "http://localhost:" + os.environ["JUPYTER_SERVER_PORT"]
+    token = os.environ["JUPYTER_SERVER_TOKEN"]
     path = "test.ipynb"
 
     notebook_factory(path)
@@ -42,8 +47,11 @@ def test_create_notebook_context_manager(jupyter_server, notebook_factory):
     }
 
 
-def test_create_notebook_no_context_manager(jupyter_server, notebook_factory):
-    server_url, token = jupyter_server
+def test_create_notebook_no_context_manager(notebook_factory):
+# def test_create_notebook_no_context_manager(jupyter_server, notebook_factory):
+    # server_url, token = jupyter_server
+    server_url = "http://localhost:" + os.environ["JUPYTER_SERVER_PORT"]
+    token = os.environ["JUPYTER_SERVER_TOKEN"]
     path = "test.ipynb"
 
     notebook_factory(path)
