@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import threading
 import typing as t
 import warnings
 from collections.abc import MutableSequence
@@ -41,8 +42,6 @@ except ImportError:
             return set(range(size))
 
         return set()
-
-
 
 
 class KernelClient(t.Protocol):
@@ -89,7 +88,9 @@ class KernelClient(t.Protocol):
         ...
 
 
-def save_in_notebook_hook(outputs: list[dict], ycell: pycrdt.Map, msg: dict) -> None:
+def save_in_notebook_hook(
+    lock: threading.Lock, outputs: list[dict], ycell: pycrdt.Map, msg: dict
+) -> None:
     """Callback on execution request when an output is emitted.
 
     Args:
@@ -100,15 +101,18 @@ def save_in_notebook_hook(outputs: list[dict], ycell: pycrdt.Map, msg: dict) -> 
     indexes = output_hook(outputs, msg)
     cell_outputs = t.cast(pycrdt.Array, ycell["outputs"])
     if len(indexes) == len(cell_outputs):
-        with cell_outputs.doc.transaction():
-            cell_outputs.clear()
-            cell_outputs.extend(outputs)
+        with lock:
+            with cell_outputs.doc.transaction():
+                cell_outputs.clear()
+                cell_outputs.extend(outputs)
     else:
-        for index in indexes:
-            if index >= len(cell_outputs):
-                cell_outputs.append(outputs[index])
-            else:
-                cell_outputs[index] = outputs[index]
+        with lock:
+            with cell_outputs.doc.transaction():
+                for index in indexes:
+                    if index >= len(cell_outputs):
+                        cell_outputs.append(outputs[index])
+                    else:
+                        cell_outputs[index] = outputs[index]
 
 
 class NotebookModel(MutableSequence):
@@ -122,21 +126,32 @@ class NotebookModel(MutableSequence):
 
     def __init__(self) -> None:
         self._doc = YNotebook()
+        self._lock = threading.Lock()
+        """Lock to prevent updating the document in multiple threads simultaneously.
+
+        That may induce a Panic error; see https://github.com/datalayer/jupyter-nbmodel-client/issues/12
+        """
+
+        # Initialize _doc
+        self._reset_y_model()
 
     def __delitem__(self, index: int) -> NotebookNode:
-        raw_ycell = self._doc.ycells.pop(index)
+        with self._lock:
+            raw_ycell = self._doc.ycells.pop(index)
         cell: dict[str, t.Any] = raw_ycell.to_py()
         nbcell = NotebookNode(**cell)
         return nbcell
 
     def __getitem__(self, index: int) -> NotebookNode:
         raw_ycell = self._doc.ycells[index]
-        cell = raw_ycell.to_py()
+        with self._lock:
+            cell = raw_ycell.to_py()
         nbcell = NotebookNode(**cell)
         return nbcell
 
     def __setitem__(self, index: int, value: dict[str, t.Any]) -> None:
-        self._doc.set_cell(index, value)
+        with self._lock:
+            self._doc.set_cell(index, value)
 
     def __len__(self) -> int:
         """Number of cells"""
@@ -145,24 +160,28 @@ class NotebookModel(MutableSequence):
     @property
     def nbformat(self) -> int:
         """Notebook format major version."""
-        return int(self._doc._ymeta.get("nbformat"))
+        with self._lock:
+            return int(self._doc._ymeta.get("nbformat") or current_api.nbformat_minor)
 
     @property
     def nbformat_minor(self) -> int:
         """Notebook format minor version."""
-        return int(self._doc._ymeta.get("nbformat_minor"))
+        with self._lock:
+            return int(self._doc._ymeta.get("nbformat_minor") or current_api.nbformat_minor)
 
     @property
     def metadata(self) -> dict[str, t.Any]:
         """Notebook metadata."""
-        return t.cast(pycrdt.Map, self._doc._ymeta["metadata"]).to_py()
+        with self._lock:
+            return t.cast(pycrdt.Map, self._doc._ymeta["metadata"]).to_py() or {}
 
     @metadata.setter
     def metadata(self, value: dict[str, t.Any]) -> None:
         metadata = t.cast(pycrdt.Map, self._doc._ymeta["metadata"])
-        with metadata.doc.transaction():
-            metadata.clear()
-            metadata.update(value)
+        with self._lock:
+            with metadata.doc.transaction():
+                metadata.clear()
+                metadata.update(value)
 
     def add_code_cell(self, source: str, **kwargs) -> int:
         """Add a code cell
@@ -175,7 +194,8 @@ class NotebookModel(MutableSequence):
         """
         cell = current_api.new_code_cell(source, **kwargs)
 
-        self._doc.append_cell(cell)
+        with self._lock:
+            self._doc.append_cell(cell)
 
         return len(self) - 1
 
@@ -190,7 +210,8 @@ class NotebookModel(MutableSequence):
         """
         cell = current_api.new_markdown_cell(source, **kwargs)
 
-        self._doc.append_cell(cell)
+        with self._lock:
+            self._doc.append_cell(cell)
 
         return len(self) - 1
 
@@ -205,7 +226,8 @@ class NotebookModel(MutableSequence):
         """
         cell = current_api.new_raw_cell(source, **kwargs)
 
-        self._doc.append_cell(cell)
+        with self._lock:
+            self._doc.append_cell(cell)
 
         return len(self) - 1
 
@@ -215,7 +237,8 @@ class NotebookModel(MutableSequence):
         Returns:
             The dictionary
         """
-        return self._doc.source
+        with self._lock:
+            return self._doc.source
 
     def execute_cell(
         self,
@@ -258,20 +281,22 @@ class NotebookModel(MutableSequence):
             )
 
         ycell = t.cast(pycrdt.Map, self._doc.ycells[index])
-        source = ycell["source"].to_py()
+        with self._lock:
+            source = ycell["source"].to_py()
 
         # Reset cell
-        with ycell.doc.transaction():
-            del ycell["outputs"][:]
-            ycell["execution_count"] = None
-            ycell["execution_state"] = "running"
+        with self._lock:
+            with ycell.doc.transaction():
+                del ycell["outputs"][:]
+                ycell["execution_count"] = None
+                ycell["execution_state"] = "running"
 
         outputs = []
         reply_content = {}
         try:
             reply = kernel_client.execute_interactive(
                 source,
-                output_hook=partial(save_in_notebook_hook, outputs, ycell),
+                output_hook=partial(save_in_notebook_hook, self._lock, outputs, ycell),
                 allow_stdin=False,
                 silent=silent,
                 store_history=False if silent else store_history,
@@ -281,9 +306,10 @@ class NotebookModel(MutableSequence):
 
             reply_content = reply["content"]
         finally:
-            with ycell.doc.transaction():
-                ycell["execution_count"] = reply_content.get("execution_count")
-                ycell["execution_state"] = "idle"
+            with self._lock:
+                with ycell.doc.transaction():
+                    ycell["execution_count"] = reply_content.get("execution_count")
+                    ycell["execution_state"] = "idle"
 
         return {
             "execution_count": reply_content.get("execution_count"),
@@ -299,7 +325,8 @@ class NotebookModel(MutableSequence):
             value: A mapping describing the cell
         """
         ycell = self._doc.create_ycell(value)
-        self._doc.ycells.insert(index, ycell)
+        with self._lock:
+            self._doc.ycells.insert(index, ycell)
 
     def set_cell_source(self, index: int, source: str) -> None:
         """Set a cell source.
@@ -308,7 +335,8 @@ class NotebookModel(MutableSequence):
             index: Cell index
             source: New cell source
         """
-        self._doc._ycells[index].set("source", source)
+        with self._lock:
+            t.cast(pycrdt.Map, self._doc._ycells[index])["source"] = source
 
     def _reset_y_model(self) -> None:
         """Reset the Y model."""

@@ -141,7 +141,8 @@ class NbModelClient(NotebookModel):
             emsg = f"Unable to open a websocket connection to {self._server_url} within {self._timeout} s."
             raise TimeoutError(emsg)
 
-        sync_message = create_sync_message(self._doc.ydoc)
+        with self._lock:
+            sync_message = create_sync_message(self._doc.ydoc)
         self._log.debug(
             "Sending SYNC_STEP1 message for document %s",
             self._path,
@@ -201,7 +202,8 @@ class NbModelClient(NotebookModel):
                 YSyncMessageType(message[1]).name,
                 self._path,
             )
-            reply = handle_sync_message(message[1:], self._doc.ydoc)
+            with self._lock:
+                reply = handle_sync_message(message[1:], self._doc.ydoc)
             if message[1] == YSyncMessageType.SYNC_STEP2:
                 self.__synced.set()
             if reply is not None:
