@@ -8,6 +8,28 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## 0.4.0
+
+([Full Changelog](https://github.com/datalayer/jupyter-nbmodel-client/compare/v0.3.0...20ff2d14a92d9339e8ddf8e7c091c102d3ea13fa))
+
+### Enhancements made
+
+- docs: readme [#13](https://github.com/datalayer/jupyter-nbmodel-client/pull/13) ([@echarles](https://github.com/echarles))
+
+### Bugs fixed
+
+- Use a lock to prevent document access or change between threads [#16](https://github.com/datalayer/jupyter-nbmodel-client/pull/16) ([@fcollonval](https://github.com/fcollonval))
+- Revert "Use multithreading flag" [#15](https://github.com/datalayer/jupyter-nbmodel-client/pull/15) ([@fcollonval](https://github.com/fcollonval))
+- Use multithreading flag [#14](https://github.com/datalayer/jupyter-nbmodel-client/pull/14) ([@fcollonval](https://github.com/fcollonval))
+
+### Contributors to this release
+
+([GitHub contributors page for this release](https://github.com/datalayer/jupyter-nbmodel-client/graphs/contributors?from=2024-12-10&to=2024-12-18&type=c))
+
+[@echarles](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Aecharles+updated%3A2024-12-10..2024-12-18&type=Issues) | [@fcollonval](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Afcollonval+updated%3A2024-12-10..2024-12-18&type=Issues)
+
+<!-- <END NEW CHANGELOG ENTRY> -->
+
 ## 0.3.0
 
 ([Full Changelog](https://github.com/datalayer/jupyter-nbmodel-client/compare/v0.2.0...cfc7a804957b777900c105cada76993ce0f6d0c0))
@@ -25,8 +47,6 @@
 ([GitHub contributors page for this release](https://github.com/datalayer/jupyter-nbmodel-client/graphs/contributors?from=2024-12-09&to=2024-12-10&type=c))
 
 [@fcollonval](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Afcollonval+updated%3A2024-12-09..2024-12-10&type=Issues)
-
-<!-- <END NEW CHANGELOG ENTRY> -->
 
 ## 0.2.0
 

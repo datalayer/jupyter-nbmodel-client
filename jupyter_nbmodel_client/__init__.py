@@ -9,6 +9,6 @@ from nbformat import NotebookNode
 from .client import NbModelClient
 from .model import KernelClient, NotebookModel
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = ["KernelClient", "NbModelClient", "NotebookModel", "NotebookNode"]
