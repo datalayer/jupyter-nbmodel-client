@@ -27,29 +27,83 @@ from .utils import fetch, url_path_join
 default_logger = logging.getLogger("jupyter_nbmodel_client")
 
 
+def get_jupyter_notebook_websocket_url(
+    server_url: str,
+    path: str,
+    token: str | None = None,
+    timeout: float = REQUEST_TIMEOUT,
+    log: logging.Logger | None = None,
+) -> str:
+    """Get the websocket endpoint to connect to a collaborative Jupyter notebook.
+
+    Args:
+        server_url: Jupyter Server URL
+        path: Notebook path relative to the server root directory
+        token: [optional] Jupyter Server authentication token; default None
+        timeout: [optional] Request timeout in seconds; default to environment variable REQUEST_TIMEOUT
+        log: [optional] Custom logger; default local logger
+
+    Returns:
+        The websocket endpoint
+    """
+    (log or default_logger).debug("Request the session ID from the server.")
+    # Fetch a session ID
+    response = fetch(
+        url_path_join(server_url, "/api/collaboration/session", quote(path)),
+        token,
+        method="PUT",
+        json={"format": "json", "type": "notebook"},
+        timeout=timeout,
+    )
+
+    response.raise_for_status()
+    content = response.json()
+
+    room_id = f"{content['format']}:{content['type']}:{content['fileId']}"
+
+    base_ws_url = HTTP_PROTOCOL_REGEXP.sub("ws", server_url, 1)
+    room_url = url_path_join(base_ws_url, "api/collaboration/room", room_id)
+    params = {"sessionId": content["sessionId"]}
+    if token is not None:
+        params["token"] = token
+    room_url += "?" + urlencode(params)
+    return room_url
+
+
 class NbModelClient(NotebookModel):
     """Client to one Jupyter notebook model.
 
     Args:
-        server_url: Jupyter Server URL
-        token: Jupyter Server authentication token
-        path: Notebook path relative to the server root directory
-        timeout: Request timeout in seconds; default to environment variable REQUEST_TIMEOUT
-        log: Custom logger
+        ws_url: Endpoint to connect to the collaborative Jupyter notebook.
+        path: [optional] Notebook path relative to the server root directory; default None
+        timeout: [optional] Request timeout in seconds; default to environment variable REQUEST_TIMEOUT
+        log: [optional] Custom logger; default local logger
+
+    Examples:
+
+    When connection to a Jupyter notebook server, you can leverage the get_jupyter_notebook_websocket_url
+    helper:
+
+    >>> from jupyter_nbmodel_client import NbModelClient, get_jupyter_notebook_websocket_url
+    >>> client = NbModelClient(
+    >>>     get_jupyter_notebook_websocket_url(
+    >>>         "http://localhost:8888",
+    >>>         "path/to/notebook.ipynb",
+    >>>         "your-server-token"
+    >>>     )
+    >>> )
     """
 
     def __init__(
         self,
-        server_url: str,
-        path: str,
-        token: str | None = None,
+        websocket_url: str,
+        path: str | None = None,
         timeout: float = REQUEST_TIMEOUT,
         log: logging.Logger | None = None,
     ) -> None:
         super().__init__()
-        self._server_url = server_url
-        self._token = token
-        self._path = path
+        self._ws_url = websocket_url
+        self._path = path or websocket_url
         self._timeout = timeout
         self._log = log or default_logger
 
@@ -70,11 +124,6 @@ class NbModelClient(NotebookModel):
         return self._path
 
     @property
-    def server_url(self) -> str:
-        """Jupyter Server URL."""
-        return self._server_url
-
-    @property
     def synced(self) -> bool:
         """Whether the model is synced or not."""
         return self.__synced.is_set()
@@ -90,31 +139,6 @@ class NbModelClient(NotebookModel):
         self._log.info("Closing the context")
         self.stop()
 
-    def _get_websocket_url(self) -> str:
-        """Get the websocket URL."""
-        self._log.debug("Request the session ID from the server.")
-        # Fetch a session ID
-        response = fetch(
-            url_path_join(self._server_url, "/api/collaboration/session", quote(self._path)),
-            self._token,
-            method="PUT",
-            json={"format": "json", "type": "notebook"},
-            timeout=self._timeout,
-        )
-
-        response.raise_for_status()
-        content = response.json()
-
-        room_id = f"{content['format']}:{content['type']}:{content['fileId']}"
-
-        base_ws_url = HTTP_PROTOCOL_REGEXP.sub("ws", self._server_url, 1)
-        room_url = url_path_join(base_ws_url, "api/collaboration/room", room_id)
-        params = {"sessionId": content["sessionId"]}
-        if self._token is not None:
-            params["token"] = self._token
-        room_url += "?" + urlencode(params)
-        return room_url
-
     def start(self) -> None:
         """Start the client."""
         if self.__websocket:
@@ -123,7 +147,7 @@ class NbModelClient(NotebookModel):
         self._log.debug("Starting the websocket connection…")
 
         self.__websocket = WebSocketApp(
-            self._get_websocket_url(),
+            self._ws_url,
             header=["User-Agent: Jupyter NbModel Client"],
             on_close=self._on_close,
             on_open=self._on_open,
@@ -138,7 +162,7 @@ class NbModelClient(NotebookModel):
 
         if not self.__connection_ready.is_set():
             self.stop()
-            emsg = f"Unable to open a websocket connection to {self._server_url} within {self._timeout} s."
+            emsg = f"Unable to open a websocket connection to {self._ws_url} within {self._timeout} s."
             raise TimeoutError(emsg)
 
         with self._lock:
@@ -206,6 +230,7 @@ class NbModelClient(NotebookModel):
                 reply = handle_sync_message(message[1:], self._doc.ydoc)
             if message[1] == YSyncMessageType.SYNC_STEP2:
                 self.__synced.set()
+                self._fix_model()
             if reply is not None:
                 self._log.debug(
                     "Sending SYNC_STEP2 message to document %s",

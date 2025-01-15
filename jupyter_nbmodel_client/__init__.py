@@ -6,9 +6,15 @@
 
 from nbformat import NotebookNode
 
-from .client import NbModelClient
+from .client import NbModelClient, get_jupyter_notebook_websocket_url
 from .model import KernelClient, NotebookModel
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
-__all__ = ["KernelClient", "NbModelClient", "NotebookModel", "NotebookNode"]
+__all__ = [
+    "KernelClient",
+    "NbModelClient",
+    "NotebookModel",
+    "NotebookNode",
+    "get_jupyter_notebook_websocket_url",
+]

@@ -38,9 +38,15 @@ jupyter lab --port 8888 --IdentityProvider.token MY_TOKEN
 3. Open a Python REPL and execute the following snippet to add a cell.
 
 ```py
-from jupyter_nbmodel_client import NbModelClient
+from jupyter_nbmodel_client import NbModelClient, get_jupyter_notebook_websocket_url
 
-with NbModelClient(server_url="http://localhost:8888", token="MY_TOKEN", path="test.ipynb") as notebook:
+with NbModelClient(
+    get_jupyter_notebook_websocket_url(
+        server_url="http://localhost:8888",
+        token="MY_TOKEN",
+        path="test.ipynb"
+    )
+) as notebook:
     notebook.add_code_cell("print('hello world')")
 ```
 
@@ -50,10 +56,16 @@ with NbModelClient(server_url="http://localhost:8888", token="MY_TOKEN", path="t
 
 ```py
 from jupyter_kernel_client import KernelClient
-from jupyter_nbmodel_client import NbModelClient
+from jupyter_nbmodel_client import NbModelClient, get_jupyter_notebook_websocket_url
 
 with KernelClient(server_url="http://localhost:8888", token="MY_TOKEN") as kernel:
-    with NbModelClient(server_url="http://localhost:8888", token="MY_TOKEN", path="test.ipynb") as notebook:
+    with NbModelClient(
+        get_jupyter_notebook_websocket_url(
+            server_url="http://localhost:8888",
+            token="MY_TOKEN",
+            path="test.ipynb"
+        )
+    ) as notebook:
         cell_index = notebook.add_code_cell("print('hello world')")
         results = notebook.execute_cell(cell_index, kernel)
 
@@ -67,7 +79,7 @@ You can go further and create a plot with Matplotlib.
 
 ```py
 from jupyter_kernel_client import KernelClient
-from jupyter_nbmodel_client import NbModelClient
+from jupyter_nbmodel_client import NbModelClient, get_jupyter_notebook_websocket_url
 
 CODE = """import matplotlib.pyplot as plt
 
@@ -88,7 +100,13 @@ plt.show()
 """
 
 with KernelClient(server_url="http://localhost:8888", token="MY_TOKEN") as kernel:
-    with NbModelClient(server_url="http://localhost:8888", token="MY_TOKEN", path="test.ipynb") as notebook:
+    with NbModelClient(
+        get_jupyter_notebook_websocket_url(
+            server_url="http://localhost:8888",
+            token="MY_TOKEN",
+            path="test.ipynb"
+        )
+    ) as notebook:
         cell_index = notebook.add_code_cell(CODE)
         results = notebook.execute_cell(cell_index, kernel)
 
@@ -100,16 +118,22 @@ with KernelClient(server_url="http://localhost:8888", token="MY_TOKEN") as kerne
 
 > [!NOTE]
 >
-> Instead of using the clients as context manager, you can call the ``start()`` and ``stop()`` methods.
+> Instead of using the clients as context manager, you can call the `start()` and `stop()` methods.
 
 ```py
-from jupyter_nbmodel_client import NbModelClient
+from jupyter_nbmodel_client import NbModelClient, get_jupyter_notebook_websocket_url
 
 kernel = KernelClient(server_url="http://localhost:8888", token="MY_TOKEN")
 kernel.start()
 
 try:
-    notebook = NbModelClient(server_url="http://localhost:8888", token="MY_TOKEN", path="test.ipynb"):
+    notebook = NbModelClient(
+        get_jupyter_notebook_websocket_url(
+            server_url="http://localhost:8888",
+            token="MY_TOKEN",
+            path="test.ipynb"
+        )
+    )
     notebook.start()
     try:
         cell_index = notebook.add_code_cell("print('hello world')")
