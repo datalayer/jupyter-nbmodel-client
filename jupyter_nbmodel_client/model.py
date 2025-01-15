@@ -338,6 +338,17 @@ class NotebookModel(MutableSequence):
         with self._lock:
             t.cast(pycrdt.Map, self._doc._ycells[index])["source"] = source
 
+    def _fix_model(self) -> None:
+        """Fix the model to set mandatory notebook attributes."""
+        with self._lock:
+            with self._doc._ymeta.doc.transaction():
+                if "metadata" not in self._doc._ymeta:
+                    self._doc._ymeta["metadata"] = pycrdt.Map()
+                if "nbformat" not in self._doc._ymeta:
+                    self._doc._ymeta["nbformat"] = current_api.nbformat
+                if "nbformat_minor" not in self._doc._ymeta:
+                    self._doc._ymeta["nbformat_minor"] = current_api.nbformat_minor
+
     def _reset_y_model(self) -> None:
         """Reset the Y model."""
         self._doc = YNotebook()
