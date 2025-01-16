@@ -338,7 +338,7 @@ class NotebookModel(MutableSequence):
         cell = current_api.new_code_cell(content, **kwargs)
         self.insert(index, cell)
             
-    def insert_markdown_cell(self, index: int, content: str) -> None:
+    def insert_markdown_cell(self, index: int, content: str, **kwargs) -> None:
         """Insert a markdown cell at position index.
 
         Args:
