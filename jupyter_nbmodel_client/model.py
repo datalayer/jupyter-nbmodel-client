@@ -328,24 +328,24 @@ class NotebookModel(MutableSequence):
         with self._lock:
             self._doc.ycells.insert(index, ycell)
 
-    def insert_code_cell(self, index: int, content: str, **kwargs) -> None:
+    def insert_code_cell(self, index: int, source: str, **kwargs) -> None:
         """Insert a code cell at position index.
 
         Args:
             index: The position of the inserted cell
-            content: Content to add to the cell
+            source: Code cell source
         """
-        cell = current_api.new_code_cell(content, **kwargs)
+        cell = current_api.new_code_cell(source, **kwargs)
         self.insert(index, cell)
             
-    def insert_markdown_cell(self, index: int, content: str, **kwargs) -> None:
+    def insert_markdown_cell(self, index: int, source: str, **kwargs) -> None:
         """Insert a markdown cell at position index.
 
         Args:
             index: The position of the inserted cell
-            content: Content to add to the cell
+            source: Markdown cell source
         """
-        cell = current_api.new_markdown_cell(content, **kwargs)
+        cell = current_api.new_markdown_cell(source, **kwargs)
         self.insert(index, cell)
 
     def set_cell_source(self, index: int, source: str) -> None:
