@@ -335,9 +335,8 @@ class NotebookModel(MutableSequence):
             index: The position of the inserted cell
             content: Content to add to the cell
         """
-        ycell = self._doc.create_ycell({"cell_type": "code", "source": content})
-        with self._lock:
-            self._doc.ycells.insert(index, ycell)
+        cell = current_api.new_code_cell(content, **kwargs)
+        self.insert(index, cell)
             
     def insert_markdown_cell(self, index: int, content: str) -> None:
         """Insert a markdown cell at position index.
