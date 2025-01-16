@@ -8,6 +8,49 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## 0.6.0
+
+([Full Changelog](https://github.com/datalayer/jupyter-nbmodel-client/compare/v0.4.0...3a3b7df9b472fa4ff861da7e26b91641f5d2a37b))
+
+> [!IMPORTANT]
+> Breaking changes :warning:
+> The API to create a notebook model client changed to receive directly
+> the websocket URL for the notebook. In the case of the Jupyter Server,
+> a helper is provided to generate that websocket URL.
+
+```patch
+  from jupyter_nbmodel_client import (
+      NbModelClient,
++     get_jupyter_notebook_websocket_url
+  )
+  
+- NbModelClient(server_url="http://localhost:8888", token="MY_TOKEN", path="test.ipynb"):
++ NbModelClient(
++   get_jupyter_notebook_websocket_url(
++       server_url="http://localhost:8888",
++       token="MY_TOKEN",
++       path="test.ipynb"
++     )
++ )
+```
+
+### Enhancements made
+
+- Make the client more generic to connect to any Y websocket server [#20](https://github.com/datalayer/jupyter-nbmodel-client/pull/20) ([@fcollonval](https://github.com/fcollonval))
+- insert cell methods [#21](https://github.com/datalayer/jupyter-nbmodel-client/pull/21) ([@eleonorecharles](https://github.com/eleonorecharles))
+
+### Other merged PRs
+
+- Update jupyter-server-ydoc requirement from ~=1.0.0 to >=1.0,\<1.2 in the pip group [#19](https://github.com/datalayer/jupyter-nbmodel-client/pull/19) ([@dependabot](https://github.com/dependabot))
+
+### Contributors to this release
+
+([GitHub contributors page for this release](https://github.com/datalayer/jupyter-nbmodel-client/graphs/contributors?from=2024-12-18&to=2025-01-16&type=c))
+
+[@dependabot](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Adependabot+updated%3A2024-12-18..2025-01-16&type=Issues) | [@eleonorecharles](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Aeleonorecharles+updated%3A2024-12-18..2025-01-16&type=Issues) | [@fcollonval](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Afcollonval+updated%3A2024-12-18..2025-01-16&type=Issues)
+
+<!-- <END NEW CHANGELOG ENTRY> -->
+
 ## 0.4.0
 
 ([Full Changelog](https://github.com/datalayer/jupyter-nbmodel-client/compare/v0.3.0...20ff2d14a92d9339e8ddf8e7c091c102d3ea13fa))
@@ -27,8 +70,6 @@
 ([GitHub contributors page for this release](https://github.com/datalayer/jupyter-nbmodel-client/graphs/contributors?from=2024-12-10&to=2024-12-18&type=c))
 
 [@echarles](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Aecharles+updated%3A2024-12-10..2024-12-18&type=Issues) | [@fcollonval](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Afcollonval+updated%3A2024-12-10..2024-12-18&type=Issues)
-
-<!-- <END NEW CHANGELOG ENTRY> -->
 
 ## 0.3.0
 
