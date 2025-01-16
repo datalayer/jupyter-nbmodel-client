@@ -328,7 +328,7 @@ class NotebookModel(MutableSequence):
         with self._lock:
             self._doc.ycells.insert(index, ycell)
 
-    def insert_code_cell(self, index: int, content: str) -> None:
+    def insert_code_cell(self, index: int, content: str, **kwargs) -> None:
         """Insert a code cell at position index.
 
         Args:
