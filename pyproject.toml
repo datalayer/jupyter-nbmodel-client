@@ -27,6 +27,7 @@ test = [
   "jupyter-kernel-client",
   "jupyter-server-ydoc>=1.0,<1.2",
   "pytest>=7.0",
+  "pytest-asyncio",
   "pytest-timeout",
   "pycrdt_websocket",
   "hypercorn >=0.16.0",
