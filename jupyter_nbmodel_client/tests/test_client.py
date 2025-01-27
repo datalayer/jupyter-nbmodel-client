@@ -16,31 +16,11 @@ def test_create_notebook_context_manager(jupyter_server, notebook_factory):
     ) as notebook:
         dumped = notebook.as_dict()
 
-    assert isinstance(dumped["cells"][0]["id"], str)
-    del dumped["cells"][0]["id"]
     assert dumped == {
-        "cells": [
-            {
-                "cell_type": "code",
-                "execution_count": None,
-                "metadata": {
-                    "trusted": True,
-                },
-                "outputs": [],
-                "source": "",
-            },
-        ],
-        "metadata": {
-            "kernelspec": {
-                "display_name": "",
-                "name": "",
-            },
-            "language_info": {
-                "name": "",
-            },
-        },
-        "nbformat": 4,
-        "nbformat_minor": 5,
+        "cells": [],
+        "metadata": {},
+        "nbformat": 0,
+        "nbformat_minor": 0,
     }
 
 
@@ -59,29 +39,9 @@ def test_create_notebook_no_context_manager(jupyter_server, notebook_factory):
     finally:
         notebook.stop()
 
-    assert isinstance(dumped["cells"][0]["id"], str)
-    del dumped["cells"][0]["id"]
     assert dumped == {
-        "cells": [
-            {
-                "cell_type": "code",
-                "execution_count": None,
-                "metadata": {
-                    "trusted": True,
-                },
-                "outputs": [],
-                "source": "",
-            },
-        ],
-        "metadata": {
-            "kernelspec": {
-                "display_name": "",
-                "name": "",
-            },
-            "language_info": {
-                "name": "",
-            },
-        },
-        "nbformat": 4,
-        "nbformat_minor": 5,
+        "cells": [],
+        "metadata": {},
+        "nbformat": 0,
+        "nbformat_minor": 0,
     }

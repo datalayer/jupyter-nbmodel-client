@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 from jupyter_nbmodel_client import BaseNbAgent, NbModelClient
 
 
-async def test_default_content(ws_server):
+def test_default_content(ws_server):
     room = uuid.uuid4().hex
     with BaseNbAgent(f"{ws_server}/{room}") as agent:
         default_content = agent.as_dict()
