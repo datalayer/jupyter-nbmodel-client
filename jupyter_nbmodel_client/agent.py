@@ -202,11 +202,27 @@ class BaseNbAgent(NbModelClient):
         Returns:
             Cell or None
         """
-        for index, cell in enumerate(self):
+        for cell in self._doc.ycells:
             if cell["id"] == cell_id:
-                return cast(Map, self._doc.ycells[index])
+                return cast(Map, cell)
 
         return None
+
+    def get_cell_index(self, cell_id: str) -> int:
+        """Find the cell with the given ID.
+
+        If the cell cannot be found it will return ``-1``.
+
+        Args:
+            cell_id: str
+        Returns:
+            Cell index or -1
+        """
+        for index, cell in enumerate(self._doc.ycells):
+            if cell["id"] == cell_id:
+                return index
+
+        return -1
 
     def update_document(
         self, prompt: dict, message_type: AIMessageType, message: str, cell_id: str = ""
