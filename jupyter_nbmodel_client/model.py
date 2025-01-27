@@ -125,7 +125,7 @@ class NotebookModel(MutableSequence):
     # FIXME add API to clear code cell; aka execution count and outputs
 
     def __init__(self) -> None:
-        self._doc = YNotebook()
+        self._doc: YNotebook
         self._lock = threading.Lock()
         """Lock to prevent updating the document in multiple threads simultaneously.
 
@@ -317,6 +317,37 @@ class NotebookModel(MutableSequence):
             "status": reply_content["status"],
         }
 
+    def get_cell_metadata(self, index: int, key: str, default: t.Any = None) -> t.Any:
+        """Set a cell metadata.
+
+        Args:
+            index: Cell index
+            key: Metadata key
+        Returns:
+            Metadata value or the default value if key is not found.
+        """
+        return self.__getitem__(index)["metadata"].get(key, default)
+
+    def get_cell_source(self, index: int) -> None:
+        """Get cell source.
+
+        Args:
+            index: Cell index
+        Returns:
+            The cell source
+        """
+        return self.__getitem__(index)["source"]
+
+    def get_notebook_metadata(self, key: str, default: t.Any = None) -> None:
+        """Get a notebook metadata.
+
+        Args:
+            key: Metadata key
+        Returns:
+            Metadata value or the default value if not found
+        """
+        return self.metadata.get(key, default)
+
     def insert(self, index: int, value: dict[str, t.Any]) -> None:
         """Insert a new cell at position index.
 
@@ -337,7 +368,7 @@ class NotebookModel(MutableSequence):
         """
         cell = current_api.new_code_cell(source, **kwargs)
         self.insert(index, cell)
-            
+
     def insert_markdown_cell(self, index: int, source: str, **kwargs) -> None:
         """Insert a markdown cell at position index.
 
@@ -348,6 +379,19 @@ class NotebookModel(MutableSequence):
         cell = current_api.new_markdown_cell(source, **kwargs)
         self.insert(index, cell)
 
+    def set_cell_metadata(self, index: int, key: str, value: t.Any) -> None:
+        """Set a cell metadata.
+
+        Args:
+            index: Cell index
+            key: Metadata key
+            value: Metadata value
+        """
+        with self._lock:
+            t.cast(pycrdt.Map, t.cast(pycrdt.Map, self._doc._ycells[index])["metadata"])[key] = (
+                value
+            )
+
     def set_cell_source(self, index: int, source: str) -> None:
         """Set a cell source.
 
@@ -357,6 +401,16 @@ class NotebookModel(MutableSequence):
         """
         with self._lock:
             t.cast(pycrdt.Map, self._doc._ycells[index])["source"] = source
+
+    def set_notebook_metadata(self, key: str, value: t.Any) -> None:
+        """Set a notebook metadata.
+
+        Args:
+            key: Metadata key
+            value: Metadata value
+        """
+        with self._lock:
+            t.cast(pycrdt.Map, self._doc._ymeta["metadata"])[key] = value
 
     def _fix_model(self) -> None:
         """Fix the model to set mandatory notebook attributes."""
