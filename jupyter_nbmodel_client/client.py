@@ -8,7 +8,7 @@ import logging
 import os
 import typing as t
 from threading import Event, Thread
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlparse
 
 from pycrdt import (
     Subscription,
@@ -166,7 +166,8 @@ class NbModelClient(NotebookModel):
 
         if not self.__connection_ready.is_set():
             self.stop()
-            emsg = f"Unable to open a websocket connection to {self._ws_url} within {self._timeout} s."
+            ws_url = urlparse(self._ws_url)._replace(query="", fragment="").geturl()
+            emsg = f"Unable to open a websocket connection to {ws_url} within {self._timeout} s."
             raise TimeoutError(emsg)
 
         with self._lock:
