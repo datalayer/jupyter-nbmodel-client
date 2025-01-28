@@ -154,6 +154,68 @@ pip uninstall jupyter_nbmodel_client
 
 ## Contributing
 
+### Data models
+
+The following json schema describe the data model used in cells and notebook metadata
+to communicate between user clients and the ai agent.
+
+```json
+{
+  "datalayer": {
+    "type": "object",
+    "properties": {
+      "ai": {
+        "type": "object",
+        "properties": {
+          "prompts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "title": "Prompt unique identifier",
+                  "type": "string"
+                },
+                "prompt": {
+                  "title": "User prompt",
+                  "type": "string"
+                },
+                "username": {
+                  "title": "Unique identifier of the user making the prompt.",
+                  "type": "string"
+                }
+              },
+              "required": ["id", "prompt"]
+            }
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "parent_id": {
+                  "title": "Prompt unique identifier",
+                  "type": "string"
+                },
+                "message": {
+                  "title": "AI reply",
+                  "type": "string"
+                },
+                "type": {
+                  "title": "Type message",
+                  "enum": [0, 1, 2]
+                }
+              },
+              "required": ["id", "prompt"]
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
 ### Development install
 
 ```bash

@@ -5,9 +5,11 @@
 from __future__ import annotations
 
 import logging
+import os
 import secrets
 import signal
 import socket
+import sys
 import typing as t
 from contextlib import closing
 from pathlib import Path
@@ -18,7 +20,8 @@ import pytest
 import requests
 
 
-def find_free_port():
+@pytest.fixture
+def unused_port():
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
         s.bind(("localhost", 0))
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -31,13 +34,13 @@ def print_stream(stream):
 
 
 @pytest.fixture
-def jupyter_server(tmp_path) -> t.Generator[tuple[str, str], t.Any, t.Any]:
+def jupyter_server(tmp_path, unused_port) -> t.Generator[tuple[str, str], t.Any, t.Any]:
     """Start a Jupyter Server in a subprocess.
 
     Returns:
         A tuple (server_url, token)
     """
-    port = find_free_port()
+    port = unused_port
     token = secrets.token_hex(20)
 
     jp_server = Popen(
@@ -116,3 +119,24 @@ def notebook_factory(tmp_path):
         nbpath.write_text(content)
 
     return factory
+
+
+@pytest.fixture
+def ws_server(unused_port, monkeypatch):
+    monkeypatch.setenv("HYPERCORN_PORT", str(unused_port))
+    HERE = Path(__file__).parent
+
+    ws_server = Popen(
+        [
+            sys.executable,
+            str(HERE / "_asgi.py"),
+        ],
+    )
+
+    try:
+        yield f"ws://localhost:{unused_port}"
+    finally:
+        ws_server.send_signal(signal.SIGINT)
+        ws_server.communicate(timeout=10)
+        if ws_server.poll() is None:
+            ws_server.terminate()

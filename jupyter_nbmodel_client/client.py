@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import typing as t
 from threading import Event, Thread
 from urllib.parse import quote, urlencode
@@ -76,6 +77,7 @@ class NbModelClient(NotebookModel):
     Args:
         ws_url: Endpoint to connect to the collaborative Jupyter notebook.
         path: [optional] Notebook path relative to the server root directory; default None
+        username: [optional] Client user name; default to environment variable USER
         timeout: [optional] Request timeout in seconds; default to environment variable REQUEST_TIMEOUT
         log: [optional] Custom logger; default local logger
 
@@ -98,12 +100,14 @@ class NbModelClient(NotebookModel):
         self,
         websocket_url: str,
         path: str | None = None,
+        username: str = os.environ.get("USER", "username"),
         timeout: float = REQUEST_TIMEOUT,
         log: logging.Logger | None = None,
     ) -> None:
         super().__init__()
         self._ws_url = websocket_url
         self._path = path or websocket_url
+        self._username = username
         self._timeout = timeout
         self._log = log or default_logger
 
@@ -188,7 +192,9 @@ class NbModelClient(NotebookModel):
                 self._doc.ydoc.unobserve(self._doc_update_subscription)
             except ValueError as e:
                 if str(e) != "list.remove(x): x not in list":
-                    self._log.error("Failed to unobserve the notebook model.", exc_info=e)
+                    self._log.error(
+                        "Failed to unobserve the notebook model.", exc_info=e
+                    )
 
         # Reset the model
         self._reset_y_model()
@@ -211,7 +217,9 @@ class NbModelClient(NotebookModel):
         self._log.debug("Websocket connection opened.")
         self.__connection_ready.set()
 
-    def _on_close(self, _: WebSocket, close_status_code: t.Any, close_msg: t.Any) -> None:
+    def _on_close(
+        self, _: WebSocket, close_status_code: t.Any, close_msg: t.Any
+    ) -> None:
         msg = "Websocket connection is closed"
         if close_status_code or close_msg:
             self._log.info("%s: %s %s", msg, close_status_code, close_msg)
