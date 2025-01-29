@@ -6,12 +6,15 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
 from enum import IntEnum
+from logging import Logger
 from typing import Any, Literal, cast
 
 from pycrdt import ArrayEvent, Map, MapEvent
 
-from .client import NbModelClient
+from .client import REQUEST_TIMEOUT, NbModelClient
 
 
 class AIMessageType(IntEnum):
@@ -79,9 +82,44 @@ class BaseNbAgent(NbModelClient):
     """
 
     # FIXME implement username retrieval
+    def __init__(
+        self,
+        websocket_url: str,
+        path: str | None = None,
+        username: str = os.environ.get("USER", "username"),
+        timeout: float = REQUEST_TIMEOUT,
+        log: Logger | None = None,
+    ) -> None:
+        super().__init__(websocket_url, path, username, timeout, log)
+        self._doc_events: asyncio.Queue[dict] = asyncio.Queue()
+        self._events_worker: asyncio.Task | None = None
+
+    async def start(self) -> None:
+        await super().start()
+        self._events_worker = asyncio.create_task(self._process_doc_events())
+
+    async def stop(self) -> None:
+        await super().stop()
+        if self._events_worker:
+            self._events_worker.cancel()
+            self._events_worker = None
+
+        while not self._doc_events.empty():
+            self._doc_events.get_nowait()
+
+    async def _process_doc_events(self) -> None:
+        while True:
+            event = await self._doc_events.get()
+            event_type = event.pop("type")
+            if event_type == "user":
+                self._on_user_prompt(**event)
+            if event_type == "source":
+                self._on_cell_source_changes(**event)
 
     def _on_notebook_changes(
-        self, part: Literal["state"] | Literal["meta"] | Literal["cells"] | str, all_changes: Any
+        self,
+        part: Literal["state"] | Literal["meta"] | Literal["cells"] | str,
+        all_changes: Any,
     ) -> None:
         # _debug_print_changes(part, all_changes)
 
@@ -105,28 +143,56 @@ class BaseNbAgent(NbModelClient):
                                     )
                                     if new_prompts:
                                         for prompt in filter(
-                                            lambda p: p.get("id") in new_prompts, prompts
+                                            lambda p: p.get("id") in new_prompts,
+                                            prompts,
                                         ):
-                                            self._on_user_prompt(cell["id"], prompt["prompt"])
+                                            self._doc_events.put_nowait(
+                                                {
+                                                    "type": "user",
+                                                    "cell_id": cell["id"],
+                                                    "prompt": prompt["prompt"],
+                                                    "username": prompt.get("user"),
+                                                }
+                                            )
                                 if "source" in cell:
-                                    self._on_cell_source_changes(cell["id"], cell["source"], "")
+                                    self._doc_events.put_nowait(
+                                        {
+                                            "type": "source",
+                                            "cell_id": cell["id"],
+                                            "new_source": cell["source"],
+                                            "old_source": "",
+                                        }
+                                    )
                 elif path_length == 1:
                     # Change is on one cell
                     for key, change in changes.keys.items():
                         if key == "source":
                             if change["action"] == "add":
-                                self._on_cell_source_changes(
-                                    changes.target["id"],
-                                    change["newValue"],
-                                    change.get("oldValue", ""),
+                                self._doc_events.put_nowait(
+                                    {
+                                        "type": "source",
+                                        "cell_id": changes.target["id"],
+                                        "new_source": change["newValue"],
+                                        "old_source": change.get("oldValue", ""),
+                                    }
                                 )
                             elif change["action"] == "update":
-                                self._on_cell_source_changes(
-                                    changes.target["id"], change["newValue"], change["oldValue"]
+                                self._doc_events.put_nowait(
+                                    {
+                                        "type": "source",
+                                        "cell_id": changes.target["id"],
+                                        "new_source": change["newValue"],
+                                        "old_source": change["oldValue"],
+                                    }
                                 )
                             elif change["action"] == "delete":
-                                self._on_cell_source_changes(
-                                    changes.target["id"], change.get("newValue"), change["oldValue"]
+                                self._doc_events.put_nowait(
+                                    {
+                                        "type": "source",
+                                        "cell_id": changes.target["id"],
+                                        "new_source": change.get("newValue", ""),
+                                        "old_source": change["oldValue"],
+                                    }
                                 )
                         elif key == "metadata":
                             new_metadata = change.get("newValue", {})
@@ -138,7 +204,14 @@ class BaseNbAgent(NbModelClient):
                             )
                             if new_prompts and change["action"] in {"add", "update"}:
                                 for prompt in filter(lambda p: p.get("id") in new_prompts, prompts):
-                                    self._on_user_prompt(changes.target["id"], prompt["prompt"])
+                                    self._doc_events.put_nowait(
+                                        {
+                                            "type": "user",
+                                            "cell_id": changes.target["id"],
+                                            "prompt": prompt["prompt"],
+                                            "username": prompt.get("user"),
+                                        }
+                                    )
                             # elif change["action"] == "delete":
                             #     ...
                         # elif key == "outputs":
@@ -161,8 +234,13 @@ class BaseNbAgent(NbModelClient):
                             )
                             if new_prompts and change["action"] in {"add", "update"}:
                                 for prompt in filter(lambda p: p.get("id") in new_prompts, prompts):
-                                    self._on_user_prompt(
-                                        self._doc.ycells[changes.path[0]]["id"], prompt["prompt"]
+                                    self._doc_events.put_nowait(
+                                        {
+                                            "type": "user",
+                                            "cell_id": self._doc.ycells[changes.path[0]]["id"],
+                                            "prompt": prompt["prompt"],
+                                            "username": prompt.get("user"),
+                                        }
                                     )
                             # elif change["action"] == "delete":
                             #     ...
@@ -184,7 +262,11 @@ class BaseNbAgent(NbModelClient):
         self._log.debug("New AI prompt sets by user [%s] in [%s]: [%s].", username, cell_id, prompt)
 
     def _on_cell_source_changes(
-        self, cell_id: str, new_source: str, old_source: str, username: str | None = None
+        self,
+        cell_id: str,
+        new_source: str,
+        old_source: str,
+        username: str | None = None,
     ) -> None:
         username = username or self._username
         self._log.debug("New cell source sets by user [%s] in [%s].", username, cell_id, new_source)
@@ -235,7 +317,11 @@ class BaseNbAgent(NbModelClient):
             message: Message to insert
             cell_id: Cell targeted by the update; if empty, the notebook is the target
         """
-        message_dict = {"parent_id": prompt["id"], "message": message, "type": message_type}
+        message_dict = {
+            "parent_id": prompt["id"],
+            "message": message,
+            "type": message_type,
+        }
 
         def set_message(metadata: Map, message: dict):
             if "datalayer" not in metadata:
