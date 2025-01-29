@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from datetime import datetime, timezone
 from enum import IntEnum
 from logging import Logger
 from typing import Any, Literal, cast
@@ -17,9 +18,16 @@ from pycrdt import ArrayEvent, Map, MapEvent
 from .client import REQUEST_TIMEOUT, NbModelClient
 
 
+def timestamp() -> int:
+    """Return the current timestamp in milliseconds since epoch."""
+    return int(datetime.now(timezone.utc).timestamp() * 1000.0)
+
+
 class AIMessageType(IntEnum):
     """Type of AI agent message."""
 
+    ERROR = -1
+    """Error message."""
     ACKNOWLEDGE = 0
     """Prompt is being processed."""
     SUGGESTION = 1
@@ -56,7 +64,7 @@ class BaseNbAgent(NbModelClient):
         - method:`_on_cell_source_changes(self, cell_id: str, new_source: str, old_source: str, username: str | None = None):
             Callback on cell source changes
       - The agent can leverage the helper functions to send a reply to the user:
-        - method:`update_document(self, prompt: dict, message_type: AIMessageType, message: str, cell_id: str = "")`:
+        - method:`save_ai_message(self, message_type: AIMessageType, message: str, cell_id: str = "", parent_id: str | None = None)`:
             Attach a message to the given cell (or to the notebook if no ``cell_id`` is provided).
 
     Args:
@@ -134,7 +142,9 @@ class BaseNbAgent(NbModelClient):
                             for cell in delta["insert"]:
                                 if "metadata" in cell:
                                     new_metadata = cell["metadata"]
-                                    datalayer_ia = new_metadata.get("datalayer", {}).get("ai", {})
+                                    datalayer_ia = new_metadata.get(
+                                        "datalayer", {}
+                                    ).get("ai", {})
                                     prompts = datalayer_ia.get("prompts", [])
                                     prompt_ids = {prompt["id"] for prompt in prompts}
                                     new_prompts = prompt_ids.difference(
@@ -150,8 +160,12 @@ class BaseNbAgent(NbModelClient):
                                                 {
                                                     "type": "user",
                                                     "cell_id": cell["id"],
+                                                    "prompt_id": prompt["id"],
                                                     "prompt": prompt["prompt"],
                                                     "username": prompt.get("user"),
+                                                    "timestamp": prompt.get(
+                                                        "timestamp"
+                                                    ),
                                                 }
                                             )
                                 if "source" in cell:
@@ -159,7 +173,7 @@ class BaseNbAgent(NbModelClient):
                                         {
                                             "type": "source",
                                             "cell_id": cell["id"],
-                                            "new_source": cell["source"],
+                                            "new_source": cell["source"].to_py(),
                                             "old_source": "",
                                         }
                                     )
@@ -196,20 +210,27 @@ class BaseNbAgent(NbModelClient):
                                 )
                         elif key == "metadata":
                             new_metadata = change.get("newValue", {})
-                            datalayer_ia = new_metadata.get("datalayer", {}).get("ai", {})
+                            datalayer_ia = new_metadata.get("datalayer", {}).get(
+                                "ai", {}
+                            )
                             prompts = datalayer_ia.get("prompts", [])
                             prompt_ids = {prompt["id"] for prompt in prompts}
                             new_prompts = prompt_ids.difference(
-                                message["parent_id"] for message in datalayer_ia.get("messages", [])
+                                message["parent_id"]
+                                for message in datalayer_ia.get("messages", [])
                             )
                             if new_prompts and change["action"] in {"add", "update"}:
-                                for prompt in filter(lambda p: p.get("id") in new_prompts, prompts):
+                                for prompt in filter(
+                                    lambda p: p.get("id") in new_prompts, prompts
+                                ):
                                     self._doc_events.put_nowait(
                                         {
                                             "type": "user",
                                             "cell_id": changes.target["id"],
+                                            "prompt_id": prompt["id"],
                                             "prompt": prompt["prompt"],
                                             "username": prompt.get("user"),
+                                            "timestamp": prompt.get("timestamp"),
                                         }
                                     )
                             # elif change["action"] == "delete":
@@ -230,16 +251,23 @@ class BaseNbAgent(NbModelClient):
                             prompts = datalayer_ia.get("prompts")
                             prompt_ids = {prompt["id"] for prompt in prompts}
                             new_prompts = prompt_ids.difference(
-                                message["parent_id"] for message in datalayer_ia.get("messages", [])
+                                message["parent_id"]
+                                for message in datalayer_ia.get("messages", [])
                             )
                             if new_prompts and change["action"] in {"add", "update"}:
-                                for prompt in filter(lambda p: p.get("id") in new_prompts, prompts):
+                                for prompt in filter(
+                                    lambda p: p.get("id") in new_prompts, prompts
+                                ):
                                     self._doc_events.put_nowait(
                                         {
                                             "type": "user",
-                                            "cell_id": self._doc.ycells[changes.path[0]]["id"],
+                                            "cell_id": self._doc.ycells[
+                                                changes.path[0]
+                                            ]["id"],
+                                            "prompt_id": prompt["id"],
                                             "prompt": prompt["prompt"],
                                             "username": prompt.get("user"),
+                                            "timestamp": prompt.get("timestamp"),
                                         }
                                     )
                             # elif change["action"] == "delete":
@@ -257,9 +285,18 @@ class BaseNbAgent(NbModelClient):
             super()._reset_y_model()
             self._doc.observe(self._on_notebook_changes)
 
-    def _on_user_prompt(self, cell_id: str, prompt: str, username: str | None = None) -> None:
+    def _on_user_prompt(
+        self,
+        cell_id: str,
+        prompt_id: str,
+        prompt: str,
+        username: str | None = None,
+        timestamp: int | None = None,
+    ) -> None:
         username = username or self._username
-        self._log.debug("New AI prompt sets by user [%s] in [%s]: [%s].", username, cell_id, prompt)
+        self._log.debug(
+            "New AI prompt sets by user [%s] in [%s]: [%s].", username, cell_id, prompt
+        )
 
     def _on_cell_source_changes(
         self,
@@ -269,7 +306,7 @@ class BaseNbAgent(NbModelClient):
         username: str | None = None,
     ) -> None:
         username = username or self._username
-        self._log.debug("New cell source sets by user [%s] in [%s].", username, cell_id, new_source)
+        self._log.debug("New cell source sets by user [%s] in [%s].", username, cell_id)
 
     # def _on_cell_outputs_changes(self, *args) -> None:
     #     print(args)
@@ -306,21 +343,29 @@ class BaseNbAgent(NbModelClient):
 
         return -1
 
-    def update_document(
-        self, prompt: dict, message_type: AIMessageType, message: str, cell_id: str = ""
+    def save_ai_message(
+        self,
+        message_type: AIMessageType,
+        message: str,
+        cell_id: str = "",
+        parent_id: str | None = None,
     ) -> None:
         """Update the document.
 
+        If a message with the same ``parent_id`` already exists, it will be
+        overwritten.
+
         Args:
-            prompt: User prompt
             message_type: Type of message to insert in the document
             message: Message to insert
             cell_id: Cell targeted by the update; if empty, the notebook is the target
+            parent_id: Parent message id
         """
         message_dict = {
-            "parent_id": prompt["id"],
+            "parent_id": parent_id,
             "message": message,
             "type": message_type,
+            "timestamp": timestamp(),
         }
 
         def set_message(metadata: Map, message: dict):
@@ -331,7 +376,14 @@ class BaseNbAgent(NbModelClient):
             elif "messages" not in metadata["datalayer"]["ai"]:
                 metadata["datalayer"]["ai"] = {"messages": []}
 
-            metadata["datalayer"]["ai"]["messages"].append(message)
+            messages = [
+                filter(
+                    lambda m: not m.get("parent_id") or m["parent_id"] != parent_id,
+                    metadata["datalayer"]["ai"]["messages"],
+                )
+            ]
+            messages.append(message)
+            metadata["datalayer"]["ai"]["messages"] = messages
 
             metadata["datalayer"] = metadata["datalayer"].copy()
 
@@ -340,7 +392,9 @@ class BaseNbAgent(NbModelClient):
             if not cell:
                 raise ValueError(f"Cell [{cell_id}] not found.")
             if "metadata" not in cell:
-                cell["metadata"] = Map({"datalayer": {"ai": {"prompts": [], "messages": []}}})
+                cell["metadata"] = Map(
+                    {"datalayer": {"ai": {"prompts": [], "messages": []}}}
+                )
             set_message(cell["metadata"], message_dict)
 
         else:
