@@ -240,7 +240,6 @@ class NbModelClient(NotebookModel):
                 "Ignoring document %s update prior to websocket connection.", self._path
             )
             return
-
         update = event.update
         message = create_update_message(update)
         self.__updates_queue.put_nowait(message)
@@ -253,6 +252,7 @@ class NbModelClient(NotebookModel):
         while True:
             try:
                 async for message in self.__websocket:
+                    self._log.debug("Received message [%s]", message)
                     await self._on_message(message)
             except asyncio.CancelledError:
                 break
@@ -262,5 +262,11 @@ class NbModelClient(NotebookModel):
 
     async def _forward_update(self) -> None:
         while True:
-            message = await self.__updates_queue.get()
-            await self.__websocket.send(message)
+            try:
+                message = await self.__updates_queue.get()
+                self._log.debug("Forwarding message [%s]", message)
+                await self.__websocket.send(message)
+            except asyncio.CancelledError:
+                break
+            except BaseException as e:
+                self._log.error("Failed to forward update.", exc_info=e)
