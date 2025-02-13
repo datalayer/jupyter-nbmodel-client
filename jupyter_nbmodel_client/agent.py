@@ -384,10 +384,12 @@ class BaseNbAgent(NbModelClient):
             if "metadata" not in cell:
                 cell["metadata"] = Map({"datalayer": {"ai": {"prompts": [], "messages": []}}})
             set_message(cell["metadata"], message_dict)
+            self._log.debug("Add ai message in cell [%s] metadata: [%s].", cell_id, message_dict)
 
         else:
             notebook_metadata = self._doc._ymeta["metadata"]
             set_message(notebook_metadata, message_dict)
+            self._log.debug("Add ai message in notebook metadata: [%s].", cell_id, message_dict)
 
     # def notify(self, message: str, cell_id: str = "") -> None:
     #     """Send a transient message to users.
