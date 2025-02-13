@@ -122,9 +122,9 @@ class BaseNbAgent(NbModelClient):
                 event = await self._doc_events.get()
                 event_type = event.pop("type")
                 if event_type == "user":
-                    self._on_user_prompt(**event)
+                    await asyncio.to_thread(self._on_user_prompt, **event)
                 if event_type == "source":
-                    self._on_cell_source_changes(**event)
+                    await asyncio.to_thread(self._on_cell_source_changes, **event)
             except asyncio.CancelledError:
                 raise
             except BaseException as e:
@@ -381,14 +381,16 @@ class BaseNbAgent(NbModelClient):
             cell = self.get_cell(cell_id)
             if not cell:
                 raise ValueError(f"Cell [{cell_id}] not found.")
-            if "metadata" not in cell:
-                cell["metadata"] = Map({"datalayer": {"ai": {"prompts": [], "messages": []}}})
-            set_message(cell["metadata"], message_dict)
+            with self._doc._ydoc.transaction():
+                if "metadata" not in cell:
+                    cell["metadata"] = Map({"datalayer": {"ai": {"prompts": [], "messages": []}}})
+                set_message(cell["metadata"], message_dict)
             self._log.debug("Add ai message in cell [%s] metadata: [%s].", cell_id, message_dict)
 
         else:
             notebook_metadata = self._doc._ymeta["metadata"]
-            set_message(notebook_metadata, message_dict)
+            with self._doc._ydoc.transaction():
+                set_message(notebook_metadata, message_dict)
             self._log.debug("Add ai message in notebook metadata: [%s].", cell_id, message_dict)
 
     # def notify(self, message: str, cell_id: str = "") -> None:
