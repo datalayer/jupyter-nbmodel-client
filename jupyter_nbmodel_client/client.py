@@ -172,7 +172,10 @@ class NbModelClient(NotebookModel):
         await self.__websocket.send(sync_message)
 
         self._log.debug("Waiting for model synchronization…")
-        await asyncio.wait_for(self.__synced.wait(), REQUEST_TIMEOUT)
+        try:
+            await asyncio.wait_for(self.__synced.wait(), REQUEST_TIMEOUT)
+        except asyncio.TimeoutError:
+            ...
         if not self.synced:
             self._log.warning("Document %s not yet synced.", self._path)
 

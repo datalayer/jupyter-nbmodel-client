@@ -469,8 +469,9 @@ class BaseNbAgent(NbModelClient):
             )
             messages.append(message)
             metadata["datalayer"]["ai"]["messages"] = messages
-
-            metadata["datalayer"] = metadata["datalayer"].copy()
+            new_metadata = metadata["datalayer"].copy()
+            self._log.debug("New metadata: [%s].", new_metadata)
+            metadata["datalayer"] = new_metadata
 
         if cell_id:
             cell = self.get_cell(cell_id)
