@@ -97,7 +97,9 @@ class BaseNbAgent(NbModelClient):
         super().__init__(websocket_url, path, username, timeout, log)
         self._doc_events: asyncio.Queue[dict] = asyncio.Queue()
         self._events_worker: asyncio.Task | None = None
-        self._id = uuid4().hex  # ID for doc modification origin
+        self._id = hash(
+            uuid4().hex
+        )  # hashed ID for doc modification origin - as pycrdt 0.10 return hashed origin and hash(hashed) == hashed
 
     async def start(self) -> None:
         await super().start()
@@ -157,9 +159,7 @@ class BaseNbAgent(NbModelClient):
         self._log.debug(
             "Prompt: timestamp [%d] / cell_id [%s] / prompt [%s]",
             timestamp,
-            username,
             cell_id,
-            prompt_id,
             prompt[:20],
         )
 
