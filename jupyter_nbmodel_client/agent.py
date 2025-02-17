@@ -470,7 +470,7 @@ class BaseNbAgent(NbModelClient):
             messages.append(message)
             metadata["datalayer"]["ai"]["messages"] = messages
             new_metadata = metadata["datalayer"].copy()
-            self._log.debug("New metadata: [%s].", new_metadata)
+            del metadata["datalayer"]  # FIXME upstream - update of key is not possible 😱
             metadata["datalayer"] = new_metadata
 
         if cell_id:
