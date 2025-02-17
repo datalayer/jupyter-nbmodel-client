@@ -25,6 +25,8 @@ from .model import NotebookModel
 from .utils import fetch, url_path_join
 
 default_logger = logging.getLogger("jupyter_nbmodel_client")
+# Default value taken from uvicorn: https://www.uvicorn.org/#command-line-options
+WEBSOCKETS_MAX_BODY_SIZE = os.environ.get("WEBSOCKETS_MAX_BODY_SIZE", 16 * 1024 * 1024)
 
 
 def get_jupyter_notebook_websocket_url(
@@ -102,6 +104,7 @@ class NbModelClient(NotebookModel):
         username: str = os.environ.get("USER", "username"),
         timeout: float = REQUEST_TIMEOUT,
         log: logging.Logger | None = None,
+        ws_max_body_size: int | None = None,
     ) -> None:
         super().__init__()
         self._ws_url = websocket_url
@@ -109,6 +112,7 @@ class NbModelClient(NotebookModel):
         self._username = username
         self._timeout = timeout
         self._log = log or default_logger
+        self._ws_max_body_size = ws_max_body_size or WEBSOCKETS_MAX_BODY_SIZE
 
         self.__synced = asyncio.Event()
         self.__websocket: ClientConnection | None = None
@@ -153,6 +157,7 @@ class NbModelClient(NotebookModel):
             self._ws_url,
             user_agent_header="Jupyter NbModel Client",
             logger=self._log,
+            max_size=self._ws_max_body_size,
         )
 
         # Start listening to incoming message
