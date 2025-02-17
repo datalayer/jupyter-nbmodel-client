@@ -453,25 +453,23 @@ class BaseNbAgent(NbModelClient):
             "timestamp": timestamp(),
         }
 
-        def set_message(metadata: Map, message: dict):
-            if "datalayer" not in metadata:
-                metadata["datalayer"] = {"ai": {"prompts": [], "messages": []}}
-            elif "ai" not in metadata["datalayer"]:
-                metadata["datalayer"] = {"ai": {"prompts": [], "messages": []}}
-            elif "messages" not in metadata["datalayer"]["ai"]:
-                metadata["datalayer"]["ai"] = {"messages": []}
+        def set_message(metadata: dict, message: dict):
+            dla = metadata.get("datalayer") or {"ai": {"prompts": [], "messages": []}}
+            dlai = dla.get("ai", {"prompts": [], "messages": []})
+            dlmsg = dlai.get("messages", [])
 
             messages = list(
                 filter(
                     lambda m: not m.get("parent_id") or m["parent_id"] != parent_id,
-                    metadata["datalayer"]["ai"]["messages"],
+                    dlmsg,
                 )
             )
             messages.append(message)
-            metadata["datalayer"]["ai"]["messages"] = messages
-            new_metadata = metadata["datalayer"].copy()
-            del metadata["datalayer"]  # FIXME upstream - update of key is not possible 😱
-            metadata["datalayer"] = new_metadata
+            dlai["messages"] = messages
+            dla["ai"] = dlai
+            if "datalayer" in metadata:
+                del metadata["datalayer"]  # FIXME upstream - update of key is not possible 😱
+            metadata["datalayer"] = dla.copy()
 
         if cell_id:
             cell = self.get_cell(cell_id)
