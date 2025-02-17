@@ -183,6 +183,10 @@ to communicate between user clients and the ai agent.
                 "username": {
                   "title": "Unique identifier of the user making the prompt.",
                   "type": "string"
+                },
+                "timestamp": {
+                  "title": "Number of milliseconds elapsed since the epoch; i.e. January 1st, 1970 at midnight UTC.",
+                  "type": "integer"
                 }
               },
               "required": ["id", "prompt"]
@@ -204,6 +208,10 @@ to communicate between user clients and the ai agent.
                 "type": {
                   "title": "Type message",
                   "enum": [0, 1, 2]
+                },
+                "timestamp": {
+                  "title": "Number of milliseconds elapsed since the epoch; i.e. January 1st, 1970 at midnight UTC.",
+                  "type": "integer"
                 }
               },
               "required": ["id", "prompt"]
