@@ -30,10 +30,8 @@ class AIMessageType(IntEnum):
     """Error message."""
     ACKNOWLEDGE = 0
     """Prompt is being processed."""
-    SUGGESTION = 1
-    """Message suggesting a new cell content."""
-    EXPLANATION = 2
-    """Message explaining a content."""
+    REPLY = 1
+    """AI reply."""
 
 
 # def _debug_print_changes(part: str, changes: Any) -> None:
@@ -59,13 +57,10 @@ class BaseNbAgent(NbModelClient):
 
     Notes:
       - Agents are expected to extend this base class and override either
-        - method:`_on_user_prompt(self, cell_id: str, prompt: str, username: str | None = None)`:
-            Callback on user prompt
-        - method:`_on_cell_source_changes(self, cell_id: str, new_source: str, old_source: str, username: str | None = None):
-            Callback on cell source changes
-      - The agent can leverage the helper functions to send a reply to the user:
-        - method:`save_ai_message(self, message_type: AIMessageType, message: str, cell_id: str = "", parent_id: str | None = None)`:
-            Attach a message to the given cell (or to the notebook if no ``cell_id`` is provided).
+        - method:`async _on_user_prompt(self, cell_id: str, prompt: str, username: str | None = None) -> str | None`:
+            Callback on user prompt, it may return an AI reply and must raise an error in case of failure
+        - method:`async _on_cell_source_changes(self, cell_id: str, new_source: str, old_source: str, username: str | None = None) -> None`:
+            Callback on cell source changes, it must raise an error in case of failure
 
     Args:
         ws_url: Endpoint to connect to the collaborative Jupyter notebook.
@@ -115,6 +110,91 @@ class BaseNbAgent(NbModelClient):
         while not self._doc_events.empty():
             self._doc_events.get_nowait()
 
+    async def __handle_cell_source_changes(
+        self,
+        cell_id: str,
+        new_source: str,
+        old_source: str,
+        username: str | None = None,
+    ) -> None:
+        self._log.info("Process user [%s] cell [%s] source changes.", username, cell_id)
+
+        # Acknowledge through awareness
+        # await self.notify(
+        #     AIMessageType.ACKNOWLEDGE,
+        #     "AI has successfully processed the prompt.",
+        #     cell_id=cell_id,
+        # )
+        try:
+            await self._on_cell_source_changes(cell_id, new_source, old_source, username)
+        except asyncio.CancelledError:
+            raise
+        except BaseException as e:
+            error_message = f"Error while processing user prompt: {e!s}"
+            self._log.error(error_message)
+            # await self.notify(
+            #     AIMessageType.ERROR, error_message, cell_id=cell_id
+            # )
+        else:
+            self._log.info("AI processed successfully cell [%s] source changes.", cell_id)
+            # await self.notify(
+            #     AIMessageType.ACKNOWLEDGE,
+            #     "AI has successfully processed the prompt.",
+            #     cell_id=cell_id,
+            # )
+
+    async def __handle_user_prompt(
+        self,
+        cell_id: str,
+        prompt_id: str,
+        prompt: str,
+        username: str | None = None,
+        timestamp: int | None = None,
+    ) -> None:
+        self._log.info("Received user [%s] prompt [%s].", username, prompt_id)
+        self._log.debug(
+            "Prompt: timestamp [%d] / cell_id [%s] / prompt [%s]",
+            timestamp,
+            username,
+            cell_id,
+            prompt_id,
+            prompt[:20],
+        )
+
+        # Acknowledge
+        await self.save_ai_message(
+            AIMessageType.ACKNOWLEDGE,
+            "Requesting AI…",
+            cell_id=cell_id,
+            parent_id=prompt_id,
+        )
+        try:
+            reply = await self._on_user_prompt(cell_id, prompt_id, prompt, username, timestamp)
+        except asyncio.CancelledError:
+            raise
+        except BaseException as e:
+            error_message = "Error while processing user prompt"
+            self._log.error(error_message + " [%s].", prompt_id, exc_info=e)
+            await self.save_ai_message(
+                AIMessageType.ERROR,
+                error_message + f": {e!s}",
+                cell_id=cell_id,
+                parent_id=prompt_id,
+            )
+        else:
+            self._log.info("AI replied successfully to prompt [%s]: [%s]", prompt_id, reply)
+            if reply is not None:
+                await self.save_ai_message(
+                    AIMessageType.REPLY, reply, cell_id=cell_id, parent_id=prompt_id
+                )
+            else:
+                await self.save_ai_message(
+                    AIMessageType.ACKNOWLEDGE,
+                    "AI has successfully processed the prompt.",
+                    cell_id=cell_id,
+                    parent_id=prompt_id,
+                )
+
     async def _process_doc_events(self) -> None:
         self._log.debug("Starting listening on document [%s] changes…", self.path)
         while True:
@@ -122,13 +202,16 @@ class BaseNbAgent(NbModelClient):
                 event = await self._doc_events.get()
                 event_type = event.pop("type")
                 if event_type == "user":
-                    await asyncio.to_thread(self._on_user_prompt, **event)
+                    await self.__handle_user_prompt(**event)
                 if event_type == "source":
-                    await asyncio.to_thread(self._on_cell_source_changes, **event)
+                    await self.__handle_cell_source_changes(**event)
             except asyncio.CancelledError:
                 raise
             except BaseException as e:
-                self._log.error("Error while processing document events: %s", e)
+                self._log.error("Error while processing document events: %s", exc_info=e)
+            else:
+                # Sleep to get a chance to propagate changes through the websocket
+                await asyncio.sleep(0)
 
     def _on_notebook_changes(
         self,
@@ -277,18 +360,18 @@ class BaseNbAgent(NbModelClient):
             super()._reset_y_model()
             self._doc.observe(self._on_notebook_changes)
 
-    def _on_user_prompt(
+    async def _on_user_prompt(
         self,
         cell_id: str,
         prompt_id: str,
         prompt: str,
         username: str | None = None,
         timestamp: int | None = None,
-    ) -> None:
+    ) -> str | None:
         username = username or self._username
         self._log.debug("New AI prompt sets by user [%s] in [%s]: [%s].", username, cell_id, prompt)
 
-    def _on_cell_source_changes(
+    async def _on_cell_source_changes(
         self,
         cell_id: str,
         new_source: str,
@@ -298,7 +381,7 @@ class BaseNbAgent(NbModelClient):
         username = username or self._username
         self._log.debug("New cell source sets by user [%s] in [%s].", username, cell_id)
 
-    # def _on_cell_outputs_changes(self, *args) -> None:
+    # async def _on_cell_outputs_changes(self, *args) -> None:
     #     print(args)
 
     def get_cell(self, cell_id: str) -> Map | None:
@@ -333,7 +416,7 @@ class BaseNbAgent(NbModelClient):
 
         return -1
 
-    def save_ai_message(
+    async def save_ai_message(
         self,
         message_type: AIMessageType,
         message: str,
@@ -393,10 +476,15 @@ class BaseNbAgent(NbModelClient):
                 set_message(notebook_metadata, message_dict)
             self._log.debug("Add ai message in notebook metadata: [%s].", cell_id, message_dict)
 
-    # def notify(self, message: str, cell_id: str = "") -> None:
+        # Sleep to get a chance to propagate the changes through the websocket
+        await asyncio.sleep(0)
+
+    # async def notify(self, message: str, cell_id: str = "") -> None:
     #     """Send a transient message to users.
 
     #     Args:
     #         message: Notification message
     #         cell_id: Cell targeted by the notification; if empty the notebook is the target
     #     """
+    #     # Sleep to get a chance to propagate the changes through the websocket
+    #     await asyncio.sleep(0)
