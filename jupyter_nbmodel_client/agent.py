@@ -449,7 +449,7 @@ class BaseNbAgent(NbModelClient):
         message_dict = {
             "parent_id": parent_id,
             "message": message,
-            "type": message_type,
+            "type": int(message_type),
             "timestamp": timestamp(),
         }
 
