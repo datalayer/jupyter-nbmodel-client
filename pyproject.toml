@@ -19,7 +19,14 @@ classifiers = [
   "Programming Language :: Python :: 3",
   "Framework :: Jupyter",
 ]
-dependencies = ["jupyter_ydoc>=2.1.2,<4.0.0", "nbformat~=5.0", "pycrdt >=0.10.3,<0.11.0", "requests", "websocket-client"]
+dependencies = [
+  "jupyter_ydoc>=2.1.2,<4.0.0",
+  "nbformat~=5.0",
+  "pycrdt >=0.10.3,<0.13.0",
+  # "pycrdt @ git+https://github.com/fcollonval/pycrdt.git@dev",
+  "requests",
+  "websockets>=14.0.0"
+]
 
 [project.optional-dependencies]
 test = [
@@ -40,6 +47,9 @@ file = "LICENSE"
 
 [project.urls]
 Home = "https://github.com/datalayer/jupyter-nbmodel-client"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.version]
 path = "jupyter_nbmodel_client/__init__.py"

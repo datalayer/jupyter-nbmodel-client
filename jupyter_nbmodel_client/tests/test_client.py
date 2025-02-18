@@ -5,13 +5,13 @@
 from jupyter_nbmodel_client import NbModelClient, get_jupyter_notebook_websocket_url
 
 
-def test_create_notebook_context_manager(jupyter_server, notebook_factory):
+async def test_create_notebook_context_manager(jupyter_server, notebook_factory):
     server_url, token = jupyter_server
     path = "test.ipynb"
 
     notebook_factory(path)
 
-    with NbModelClient(
+    async with NbModelClient(
         get_jupyter_notebook_websocket_url(server_url=server_url, path=path, token=token)
     ) as notebook:
         dumped = notebook.as_dict()
@@ -44,7 +44,7 @@ def test_create_notebook_context_manager(jupyter_server, notebook_factory):
     }
 
 
-def test_create_notebook_no_context_manager(jupyter_server, notebook_factory):
+async def test_create_notebook_no_context_manager(jupyter_server, notebook_factory):
     server_url, token = jupyter_server
     path = "test.ipynb"
 
@@ -53,11 +53,11 @@ def test_create_notebook_no_context_manager(jupyter_server, notebook_factory):
     notebook = NbModelClient(
         get_jupyter_notebook_websocket_url(server_url=server_url, path=path, token=token)
     )
-    notebook.start()
+    await notebook.start()
     try:
         dumped = notebook.as_dict()
     finally:
-        notebook.stop()
+        await notebook.stop()
 
     assert isinstance(dumped["cells"][0]["id"], str)
     del dumped["cells"][0]["id"]

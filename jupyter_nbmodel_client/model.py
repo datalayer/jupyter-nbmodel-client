@@ -10,6 +10,7 @@ import warnings
 from collections.abc import MutableSequence
 from copy import deepcopy
 from functools import partial
+from uuid import uuid4
 
 import pycrdt
 from jupyter_ydoc import YNotebook
@@ -89,25 +90,26 @@ class KernelClient(t.Protocol):
 
 
 def save_in_notebook_hook(
-    lock: threading.Lock, outputs: list[dict], ycell: pycrdt.Map, msg: dict
+    lock: threading.Lock, outputs: list[dict], ycell: pycrdt.Map, origin: int, msg: dict
 ) -> None:
     """Callback on execution request when an output is emitted.
 
     Args:
         outputs: A list of previously emitted outputs
         ycell: The cell being executed
+        origin: Document modification origin
         msg: The output message
     """
     indexes = output_hook(outputs, msg)
     cell_outputs = t.cast(pycrdt.Array, ycell["outputs"])
     if len(indexes) == len(cell_outputs):
         with lock:
-            with cell_outputs.doc.transaction():
+            with cell_outputs.doc.transaction(origin=origin):
                 cell_outputs.clear()
                 cell_outputs.extend(outputs)
     else:
         with lock:
-            with cell_outputs.doc.transaction():
+            with cell_outputs.doc.transaction(origin=origin):
                 for index in indexes:
                     if index >= len(cell_outputs):
                         cell_outputs.append(outputs[index])
@@ -131,13 +133,17 @@ class NotebookModel(MutableSequence):
 
         That may induce a Panic error; see https://github.com/datalayer/jupyter-nbmodel-client/issues/12
         """
+        self._changes_origin = hash(
+            uuid4().hex
+        )  # hashed ID for doc modification origin - as pycrdt 0.10 return hashed origin and hash(hashed) == hashed
 
         # Initialize _doc
         self._reset_y_model()
 
     def __delitem__(self, index: int) -> NotebookNode:
         with self._lock:
-            raw_ycell = self._doc.ycells.pop(index)
+            with self._doc._ydoc.transaction(origin=self._changes_origin):
+                raw_ycell = self._doc.ycells.pop(index)
         cell: dict[str, t.Any] = raw_ycell.to_py()
         nbcell = NotebookNode(**cell)
         return nbcell
@@ -151,7 +157,8 @@ class NotebookModel(MutableSequence):
 
     def __setitem__(self, index: int, value: dict[str, t.Any]) -> None:
         with self._lock:
-            self._doc.set_cell(index, value)
+            with self._doc._ydoc.transaction(origin=self._changes_origin):
+                self._doc.set_cell(index, value)
 
     def __len__(self) -> int:
         """Number of cells"""
@@ -179,7 +186,7 @@ class NotebookModel(MutableSequence):
     def metadata(self, value: dict[str, t.Any]) -> None:
         metadata = t.cast(pycrdt.Map, self._doc._ymeta["metadata"])
         with self._lock:
-            with metadata.doc.transaction():
+            with metadata.doc.transaction(origin=self._changes_origin):
                 metadata.clear()
                 metadata.update(value)
 
@@ -195,7 +202,8 @@ class NotebookModel(MutableSequence):
         cell = current_api.new_code_cell(source, **kwargs)
 
         with self._lock:
-            self._doc.append_cell(cell)
+            with self._doc._ydoc.transaction(origin=self._changes_origin):
+                self._doc.append_cell(cell)
 
         return len(self) - 1
 
@@ -211,7 +219,8 @@ class NotebookModel(MutableSequence):
         cell = current_api.new_markdown_cell(source, **kwargs)
 
         with self._lock:
-            self._doc.append_cell(cell)
+            with self._doc._ydoc.transaction(origin=self._changes_origin):
+                self._doc.append_cell(cell)
 
         return len(self) - 1
 
@@ -227,7 +236,8 @@ class NotebookModel(MutableSequence):
         cell = current_api.new_raw_cell(source, **kwargs)
 
         with self._lock:
-            self._doc.append_cell(cell)
+            with self._doc._ydoc.transaction(origin=self._changes_origin):
+                self._doc.append_cell(cell)
 
         return len(self) - 1
 
@@ -286,7 +296,7 @@ class NotebookModel(MutableSequence):
 
         # Reset cell
         with self._lock:
-            with ycell.doc.transaction():
+            with ycell.doc.transaction(origin=self._changes_origin):
                 del ycell["outputs"][:]
                 ycell["execution_count"] = None
                 ycell["execution_state"] = "running"
@@ -296,7 +306,9 @@ class NotebookModel(MutableSequence):
         try:
             reply = kernel_client.execute_interactive(
                 source,
-                output_hook=partial(save_in_notebook_hook, self._lock, outputs, ycell),
+                output_hook=partial(
+                    save_in_notebook_hook, self._lock, outputs, ycell, self._changes_origin
+                ),
                 allow_stdin=False,
                 silent=silent,
                 store_history=False if silent else store_history,
@@ -307,7 +319,7 @@ class NotebookModel(MutableSequence):
             reply_content = reply["content"]
         finally:
             with self._lock:
-                with ycell.doc.transaction():
+                with ycell.doc.transaction(origin=self._changes_origin):
                     ycell["execution_count"] = reply_content.get("execution_count")
                     ycell["execution_state"] = "idle"
 
@@ -357,7 +369,8 @@ class NotebookModel(MutableSequence):
         """
         ycell = self._doc.create_ycell(value)
         with self._lock:
-            self._doc.ycells.insert(index, ycell)
+            with self._doc._ydoc.transaction(origin=self._changes_origin):
+                self._doc.ycells.insert(index, ycell)
 
     def insert_code_cell(self, index: int, source: str, **kwargs) -> None:
         """Insert a code cell at position index.
@@ -388,9 +401,13 @@ class NotebookModel(MutableSequence):
             value: Metadata value
         """
         with self._lock:
-            t.cast(pycrdt.Map, t.cast(pycrdt.Map, self._doc._ycells[index])["metadata"])[key] = (
-                value
-            )
+            with self._doc._ydoc.transaction(origin=self._changes_origin):
+                metadata = t.cast(
+                    pycrdt.Map, t.cast(pycrdt.Map, self._doc._ycells[index])["metadata"]
+                )
+                if key in metadata:
+                    del metadata[key]  # FIXME pycrdt only support inserting key
+                metadata[key] = value
 
     def set_cell_source(self, index: int, source: str) -> None:
         """Set a cell source.
@@ -400,7 +417,9 @@ class NotebookModel(MutableSequence):
             source: New cell source
         """
         with self._lock:
-            t.cast(pycrdt.Map, self._doc._ycells[index])["source"] = source
+            with self._doc._ydoc.transaction(origin=self._changes_origin):
+                # TODO check it works - if as metadata, it does not.
+                t.cast(pycrdt.Map, self._doc._ycells[index])["source"] = source
 
     def set_notebook_metadata(self, key: str, value: t.Any) -> None:
         """Set a notebook metadata.
@@ -410,7 +429,11 @@ class NotebookModel(MutableSequence):
             value: Metadata value
         """
         with self._lock:
-            t.cast(pycrdt.Map, self._doc._ymeta["metadata"])[key] = value
+            with self._doc._ydoc.transaction(origin=self._changes_origin):
+                metadata = t.cast(pycrdt.Map, self._doc._ymeta["metadata"])
+                if key in metadata:
+                    del metadata[key]  # FIXME pycrdt only support inserting key
+                metadata[key] = value
 
     def _fix_model(self) -> None:
         """Fix the model to set mandatory notebook attributes."""

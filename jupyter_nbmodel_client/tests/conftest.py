@@ -131,7 +131,13 @@ def ws_server(unused_port, monkeypatch):
             sys.executable,
             str(HERE / "_asgi.py"),
         ],
+        stderr=PIPE,
     )
+
+    while True:
+        log = ws_server.stderr.readline()
+        if b"Running on " in log:
+            break
 
     try:
         yield f"ws://localhost:{unused_port}"

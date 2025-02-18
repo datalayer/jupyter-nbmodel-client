@@ -21,6 +21,11 @@ To install the library, run the following command.
 pip install jupyter_nbmodel_client
 ```
 
+> [!WARNING]
+> This package requires temporary a dev version of pycrdt. Therefore you will need
+> to install a Rust compiler to install it.
+> Once down, execute `pip install maturin[patchelf]` and then `pip install "pycrdt@git+https://github.com/fcollonval/pycrdt.git@dev"`.
+
 ## Usage
 
 1. Ensure you have the needed packages in your environment to run the example here after.
@@ -183,6 +188,10 @@ to communicate between user clients and the ai agent.
                 "username": {
                   "title": "Unique identifier of the user making the prompt.",
                   "type": "string"
+                },
+                "timestamp": {
+                  "title": "Number of milliseconds elapsed since the epoch; i.e. January 1st, 1970 at midnight UTC.",
+                  "type": "integer"
                 }
               },
               "required": ["id", "prompt"]
@@ -204,6 +213,10 @@ to communicate between user clients and the ai agent.
                 "type": {
                   "title": "Type message",
                   "enum": [0, 1, 2]
+                },
+                "timestamp": {
+                  "title": "Number of milliseconds elapsed since the epoch; i.e. January 1st, 1970 at midnight UTC.",
+                  "type": "integer"
                 }
               },
               "required": ["id", "prompt"]

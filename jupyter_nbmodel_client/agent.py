@@ -6,23 +6,33 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
+from datetime import datetime, timezone
 from enum import IntEnum
+from logging import Logger
 from typing import Any, Literal, cast
+from uuid import uuid4
 
 from pycrdt import ArrayEvent, Map, MapEvent
 
-from .client import NbModelClient
+from .client import REQUEST_TIMEOUT, NbModelClient
+
+
+def timestamp() -> int:
+    """Return the current timestamp in milliseconds since epoch."""
+    return int(datetime.now(timezone.utc).timestamp() * 1000.0)
 
 
 class AIMessageType(IntEnum):
     """Type of AI agent message."""
 
+    ERROR = -1
+    """Error message."""
     ACKNOWLEDGE = 0
     """Prompt is being processed."""
-    SUGGESTION = 1
-    """Message suggesting a new cell content."""
-    EXPLANATION = 2
-    """Message explaining a content."""
+    REPLY = 1
+    """AI reply."""
 
 
 # def _debug_print_changes(part: str, changes: Any) -> None:
@@ -48,13 +58,10 @@ class BaseNbAgent(NbModelClient):
 
     Notes:
       - Agents are expected to extend this base class and override either
-        - method:`_on_user_prompt(self, cell_id: str, prompt: str, username: str | None = None)`:
-            Callback on user prompt
-        - method:`_on_cell_source_changes(self, cell_id: str, new_source: str, old_source: str, username: str | None = None):
-            Callback on cell source changes
-      - The agent can leverage the helper functions to send a reply to the user:
-        - method:`update_document(self, prompt: dict, message_type: AIMessageType, message: str, cell_id: str = "")`:
-            Attach a message to the given cell (or to the notebook if no ``cell_id`` is provided).
+        - method:`async _on_user_prompt(self, cell_id: str, prompt: str, username: str | None = None) -> str | None`:
+            Callback on user prompt, it may return an AI reply and must raise an error in case of failure
+        - method:`async _on_cell_source_changes(self, cell_id: str, new_source: str, old_source: str, username: str | None = None) -> None`:
+            Callback on cell source changes, it must raise an error in case of failure
 
     Args:
         ws_url: Endpoint to connect to the collaborative Jupyter notebook.
@@ -79,14 +86,150 @@ class BaseNbAgent(NbModelClient):
     """
 
     # FIXME implement username retrieval
+    def __init__(
+        self,
+        websocket_url: str,
+        path: str | None = None,
+        username: str = os.environ.get("USER", "username"),
+        timeout: float = REQUEST_TIMEOUT,
+        log: Logger | None = None,
+    ) -> None:
+        super().__init__(websocket_url, path, username, timeout, log)
+        self._doc_events: asyncio.Queue[dict] = asyncio.Queue()
+        self._events_worker: asyncio.Task | None = None
+
+    async def start(self) -> None:
+        await super().start()
+        self._events_worker = asyncio.create_task(self._process_doc_events())
+
+    async def stop(self) -> None:
+        await super().stop()
+        if self._events_worker:
+            self._events_worker.cancel()
+            self._events_worker = None
+
+        while not self._doc_events.empty():
+            self._doc_events.get_nowait()
+
+    async def __handle_cell_source_changes(
+        self,
+        cell_id: str,
+        new_source: str,
+        old_source: str,
+        username: str | None = None,
+    ) -> None:
+        self._log.info("Process user [%s] cell [%s] source changes.", username, cell_id)
+
+        # Acknowledge through awareness
+        # await self.notify(
+        #     AIMessageType.ACKNOWLEDGE,
+        #     "AI has successfully processed the prompt.",
+        #     cell_id=cell_id,
+        # )
+        try:
+            await self._on_cell_source_changes(cell_id, new_source, old_source, username)
+        except asyncio.CancelledError:
+            raise
+        except BaseException as e:
+            error_message = f"Error while processing user prompt: {e!s}"
+            self._log.error(error_message)
+            # await self.notify(
+            #     AIMessageType.ERROR, error_message, cell_id=cell_id
+            # )
+        else:
+            self._log.info("AI processed successfully cell [%s] source changes.", cell_id)
+            # await self.notify(
+            #     AIMessageType.ACKNOWLEDGE,
+            #     "AI has successfully processed the prompt.",
+            #     cell_id=cell_id,
+            # )
+
+    async def __handle_user_prompt(
+        self,
+        cell_id: str,
+        prompt_id: str,
+        prompt: str,
+        username: str | None = None,
+        timestamp: int | None = None,
+    ) -> None:
+        self._log.info("Received user [%s] prompt [%s].", username, prompt_id)
+        self._log.debug(
+            "Prompt: timestamp [%d] / cell_id [%s] / prompt [%s]",
+            timestamp,
+            cell_id,
+            prompt[:20],
+        )
+
+        # Acknowledge
+        await self.save_ai_message(
+            AIMessageType.ACKNOWLEDGE,
+            "Requesting AI…",
+            cell_id=cell_id,
+            parent_id=prompt_id,
+        )
+        try:
+            reply = await self._on_user_prompt(cell_id, prompt_id, prompt, username, timestamp)
+        except asyncio.CancelledError:
+            raise
+        except BaseException as e:
+            error_message = "Error while processing user prompt"
+            self._log.error(error_message + " [%s].", prompt_id, exc_info=e)
+            await self.save_ai_message(
+                AIMessageType.ERROR,
+                error_message + f": {e!s}",
+                cell_id=cell_id,
+                parent_id=prompt_id,
+            )
+        else:
+            self._log.info("AI replied successfully to prompt [%s]: [%s]", prompt_id, reply)
+            if reply is not None:
+                await self.save_ai_message(
+                    AIMessageType.REPLY, reply, cell_id=cell_id, parent_id=prompt_id
+                )
+            else:
+                await self.save_ai_message(
+                    AIMessageType.ACKNOWLEDGE,
+                    "AI has successfully processed the prompt.",
+                    cell_id=cell_id,
+                    parent_id=prompt_id,
+                )
+
+    async def _process_doc_events(self) -> None:
+        self._log.debug("Starting listening on document [%s] changes…", self.path)
+        while True:
+            try:
+                event = await self._doc_events.get()
+                event_type = event.pop("type")
+                if event_type == "user":
+                    await self.__handle_user_prompt(**event)
+                if event_type == "source":
+                    await self.__handle_cell_source_changes(**event)
+            except asyncio.CancelledError:
+                raise
+            except BaseException as e:
+                self._log.error("Error while processing document events: %s", exc_info=e)
+            else:
+                # Sleep to get a chance to propagate changes through the websocket
+                await asyncio.sleep(0)
 
     def _on_notebook_changes(
-        self, part: Literal["state"] | Literal["meta"] | Literal["cells"] | str, all_changes: Any
+        self,
+        part: Literal["state"] | Literal["meta"] | Literal["cells"] | str,
+        all_changes: Any,
     ) -> None:
         # _debug_print_changes(part, all_changes)
 
         if part == "cells":
             for changes in all_changes:
+                transaction_origin = changes.transaction.origin()
+                if transaction_origin == self._changes_origin:
+                    continue
+                else:
+                    self._log.debug(
+                        "Document changes from origin [%s] != agent origin [%s].",
+                        transaction_origin,
+                        self._changes_origin,
+                    )
                 path_length = len(changes.path)
                 if path_length == 0:
                     # Change is on the cell list
@@ -105,28 +248,58 @@ class BaseNbAgent(NbModelClient):
                                     )
                                     if new_prompts:
                                         for prompt in filter(
-                                            lambda p: p.get("id") in new_prompts, prompts
+                                            lambda p: p.get("id") in new_prompts,
+                                            prompts,
                                         ):
-                                            self._on_user_prompt(cell["id"], prompt["prompt"])
+                                            self._doc_events.put_nowait(
+                                                {
+                                                    "type": "user",
+                                                    "cell_id": cell["id"],
+                                                    "prompt_id": prompt["id"],
+                                                    "prompt": prompt["prompt"],
+                                                    "username": prompt.get("user"),
+                                                    "timestamp": prompt.get("timestamp"),
+                                                }
+                                            )
                                 if "source" in cell:
-                                    self._on_cell_source_changes(cell["id"], cell["source"], "")
+                                    self._doc_events.put_nowait(
+                                        {
+                                            "type": "source",
+                                            "cell_id": cell["id"],
+                                            "new_source": cell["source"].to_py(),
+                                            "old_source": "",
+                                        }
+                                    )
                 elif path_length == 1:
                     # Change is on one cell
                     for key, change in changes.keys.items():
                         if key == "source":
                             if change["action"] == "add":
-                                self._on_cell_source_changes(
-                                    changes.target["id"],
-                                    change["newValue"],
-                                    change.get("oldValue", ""),
+                                self._doc_events.put_nowait(
+                                    {
+                                        "type": "source",
+                                        "cell_id": changes.target["id"],
+                                        "new_source": change["newValue"],
+                                        "old_source": change.get("oldValue", ""),
+                                    }
                                 )
                             elif change["action"] == "update":
-                                self._on_cell_source_changes(
-                                    changes.target["id"], change["newValue"], change["oldValue"]
+                                self._doc_events.put_nowait(
+                                    {
+                                        "type": "source",
+                                        "cell_id": changes.target["id"],
+                                        "new_source": change["newValue"],
+                                        "old_source": change["oldValue"],
+                                    }
                                 )
                             elif change["action"] == "delete":
-                                self._on_cell_source_changes(
-                                    changes.target["id"], change.get("newValue"), change["oldValue"]
+                                self._doc_events.put_nowait(
+                                    {
+                                        "type": "source",
+                                        "cell_id": changes.target["id"],
+                                        "new_source": change.get("newValue", ""),
+                                        "old_source": change["oldValue"],
+                                    }
                                 )
                         elif key == "metadata":
                             new_metadata = change.get("newValue", {})
@@ -138,7 +311,16 @@ class BaseNbAgent(NbModelClient):
                             )
                             if new_prompts and change["action"] in {"add", "update"}:
                                 for prompt in filter(lambda p: p.get("id") in new_prompts, prompts):
-                                    self._on_user_prompt(changes.target["id"], prompt["prompt"])
+                                    self._doc_events.put_nowait(
+                                        {
+                                            "type": "user",
+                                            "cell_id": changes.target["id"],
+                                            "prompt_id": prompt["id"],
+                                            "prompt": prompt["prompt"],
+                                            "username": prompt.get("user"),
+                                            "timestamp": prompt.get("timestamp"),
+                                        }
+                                    )
                             # elif change["action"] == "delete":
                             #     ...
                         # elif key == "outputs":
@@ -161,8 +343,15 @@ class BaseNbAgent(NbModelClient):
                             )
                             if new_prompts and change["action"] in {"add", "update"}:
                                 for prompt in filter(lambda p: p.get("id") in new_prompts, prompts):
-                                    self._on_user_prompt(
-                                        self._doc.ycells[changes.path[0]]["id"], prompt["prompt"]
+                                    self._doc_events.put_nowait(
+                                        {
+                                            "type": "user",
+                                            "cell_id": self._doc.ycells[changes.path[0]]["id"],
+                                            "prompt_id": prompt["id"],
+                                            "prompt": prompt["prompt"],
+                                            "username": prompt.get("user"),
+                                            "timestamp": prompt.get("timestamp"),
+                                        }
                                     )
                             # elif change["action"] == "delete":
                             #     ...
@@ -179,17 +368,28 @@ class BaseNbAgent(NbModelClient):
             super()._reset_y_model()
             self._doc.observe(self._on_notebook_changes)
 
-    def _on_user_prompt(self, cell_id: str, prompt: str, username: str | None = None) -> None:
+    async def _on_user_prompt(
+        self,
+        cell_id: str,
+        prompt_id: str,
+        prompt: str,
+        username: str | None = None,
+        timestamp: int | None = None,
+    ) -> str | None:
         username = username or self._username
         self._log.debug("New AI prompt sets by user [%s] in [%s]: [%s].", username, cell_id, prompt)
 
-    def _on_cell_source_changes(
-        self, cell_id: str, new_source: str, old_source: str, username: str | None = None
+    async def _on_cell_source_changes(
+        self,
+        cell_id: str,
+        new_source: str,
+        old_source: str,
+        username: str | None = None,
     ) -> None:
         username = username or self._username
-        self._log.debug("New cell source sets by user [%s] in [%s].", username, cell_id, new_source)
+        self._log.debug("New cell source sets by user [%s] in [%s].", username, cell_id)
 
-    # def _on_cell_outputs_changes(self, *args) -> None:
+    # async def _on_cell_outputs_changes(self, *args) -> None:
     #     print(args)
 
     def get_cell(self, cell_id: str) -> Map | None:
@@ -224,47 +424,74 @@ class BaseNbAgent(NbModelClient):
 
         return -1
 
-    def update_document(
-        self, prompt: dict, message_type: AIMessageType, message: str, cell_id: str = ""
+    async def save_ai_message(
+        self,
+        message_type: AIMessageType,
+        message: str,
+        cell_id: str = "",
+        parent_id: str | None = None,
     ) -> None:
         """Update the document.
 
+        If a message with the same ``parent_id`` already exists, it will be
+        overwritten.
+
         Args:
-            prompt: User prompt
             message_type: Type of message to insert in the document
             message: Message to insert
             cell_id: Cell targeted by the update; if empty, the notebook is the target
+            parent_id: Parent message id
         """
-        message_dict = {"parent_id": prompt["id"], "message": message, "type": message_type}
+        message_dict = {
+            "parent_id": parent_id,
+            "message": message,
+            "type": int(message_type),
+            "timestamp": timestamp(),
+        }
 
-        def set_message(metadata: Map, message: dict):
-            if "datalayer" not in metadata:
-                metadata["datalayer"] = {"ai": {"prompts": [], "messages": []}}
-            elif "ai" not in metadata["datalayer"]:
-                metadata["datalayer"] = {"ai": {"prompts": [], "messages": []}}
-            elif "messages" not in metadata["datalayer"]["ai"]:
-                metadata["datalayer"]["ai"] = {"messages": []}
+        def set_message(metadata: dict, message: dict):
+            dla = metadata.get("datalayer") or {"ai": {"prompts": [], "messages": []}}
+            dlai = dla.get("ai", {"prompts": [], "messages": []})
+            dlmsg = dlai.get("messages", [])
 
-            metadata["datalayer"]["ai"]["messages"].append(message)
-
-            metadata["datalayer"] = metadata["datalayer"].copy()
+            messages = list(
+                filter(
+                    lambda m: not m.get("parent_id") or m["parent_id"] != parent_id,
+                    dlmsg,
+                )
+            )
+            messages.append(message)
+            dlai["messages"] = messages
+            dla["ai"] = dlai
+            if "datalayer" in metadata:
+                del metadata["datalayer"]  # FIXME upstream - update of key is not possible 😱
+            metadata["datalayer"] = dla.copy()
 
         if cell_id:
             cell = self.get_cell(cell_id)
             if not cell:
                 raise ValueError(f"Cell [{cell_id}] not found.")
-            if "metadata" not in cell:
-                cell["metadata"] = Map({"datalayer": {"ai": {"prompts": [], "messages": []}}})
-            set_message(cell["metadata"], message_dict)
+            with self._doc._ydoc.transaction(origin=self._changes_origin):
+                if "metadata" not in cell:
+                    cell["metadata"] = Map({"datalayer": {"ai": {"prompts": [], "messages": []}}})
+                set_message(cell["metadata"], message_dict)
+            self._log.debug("Add ai message in cell [%s] metadata: [%s].", cell_id, message_dict)
 
         else:
             notebook_metadata = self._doc._ymeta["metadata"]
-            set_message(notebook_metadata, message_dict)
+            with self._doc._ydoc.transaction(origin=self._changes_origin):
+                set_message(notebook_metadata, message_dict)
+            self._log.debug("Add ai message in notebook metadata: [%s].", cell_id, message_dict)
 
-    # def notify(self, message: str, cell_id: str = "") -> None:
+        # Sleep to get a chance to propagate the changes through the websocket
+        await asyncio.sleep(0)
+
+    # async def notify(self, message: str, cell_id: str = "") -> None:
     #     """Send a transient message to users.
 
     #     Args:
     #         message: Notification message
     #         cell_id: Cell targeted by the notification; if empty the notebook is the target
     #     """
+    #     # Sleep to get a chance to propagate the changes through the websocket
+    #     await asyncio.sleep(0)
