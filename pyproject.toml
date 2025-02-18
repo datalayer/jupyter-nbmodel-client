@@ -48,6 +48,9 @@ file = "LICENSE"
 [project.urls]
 Home = "https://github.com/datalayer/jupyter-nbmodel-client"
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [tool.hatch.version]
 path = "jupyter_nbmodel_client/__init__.py"
 
