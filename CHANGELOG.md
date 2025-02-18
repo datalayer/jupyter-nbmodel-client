@@ -8,6 +8,32 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## 0.7.0
+
+([Full Changelog](https://github.com/datalayer/jupyter-nbmodel-client/compare/v0.6.0...3a97512947e6055e09be6b7360a809b434f16274))
+
+> [!IMPORTANT]
+> **Breaking changes**
+> The client is now asynchronous instead of running the websocket communication in a thread. This is a workaround
+> due to the limitation of the underlying code not supporting multi-threading.
+
+### Enhancements made
+
+- Switch to async for notebook client [#26](https://github.com/datalayer/jupyter-nbmodel-client/pull/26) ([@fcollonval](https://github.com/fcollonval))
+- Add reacting model and test it [#22](https://github.com/datalayer/jupyter-nbmodel-client/pull/22) ([@fcollonval](https://github.com/fcollonval))
+
+### Bugs fixed
+
+- Prevent leaking query args [#23](https://github.com/datalayer/jupyter-nbmodel-client/pull/23) ([@fcollonval](https://github.com/fcollonval))
+
+### Contributors to this release
+
+([GitHub contributors page for this release](https://github.com/datalayer/jupyter-nbmodel-client/graphs/contributors?from=2025-01-16&to=2025-02-18&type=c))
+
+[@fcollonval](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Afcollonval+updated%3A2025-01-16..2025-02-18&type=Issues)
+
+<!-- <END NEW CHANGELOG ENTRY> -->
+
 ## 0.6.0
 
 ([Full Changelog](https://github.com/datalayer/jupyter-nbmodel-client/compare/v0.4.0...3a3b7df9b472fa4ff861da7e26b91641f5d2a37b))
@@ -48,8 +74,6 @@
 ([GitHub contributors page for this release](https://github.com/datalayer/jupyter-nbmodel-client/graphs/contributors?from=2024-12-18&to=2025-01-16&type=c))
 
 [@dependabot](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Adependabot+updated%3A2024-12-18..2025-01-16&type=Issues) | [@eleonorecharles](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Aeleonorecharles+updated%3A2024-12-18..2025-01-16&type=Issues) | [@fcollonval](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Afcollonval+updated%3A2024-12-18..2025-01-16&type=Issues)
-
-<!-- <END NEW CHANGELOG ENTRY> -->
 
 ## 0.4.0
 
