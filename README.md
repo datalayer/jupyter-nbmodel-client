@@ -21,6 +21,10 @@ To install the library, run the following command.
 pip install jupyter_nbmodel_client
 ```
 
+> [!WARNING]
+> This package requires temporary a dev version of pycrdt. Therefore you will need
+> to install a Rust compiler to install it.
+
 ## Usage
 
 1. Ensure you have the needed packages in your environment to run the example here after.
