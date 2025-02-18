@@ -97,9 +97,6 @@ class BaseNbAgent(NbModelClient):
         super().__init__(websocket_url, path, username, timeout, log)
         self._doc_events: asyncio.Queue[dict] = asyncio.Queue()
         self._events_worker: asyncio.Task | None = None
-        self._id = hash(
-            uuid4().hex
-        )  # hashed ID for doc modification origin - as pycrdt 0.10 return hashed origin and hash(hashed) == hashed
 
     async def start(self) -> None:
         await super().start()
@@ -122,30 +119,30 @@ class BaseNbAgent(NbModelClient):
         username: str | None = None,
     ) -> None:
         self._log.info("Process user [%s] cell [%s] source changes.", username, cell_id)
-        with self._doc._ydoc.transaction(origin=self._id):
-            # Acknowledge through awareness
+
+        # Acknowledge through awareness
+        # await self.notify(
+        #     AIMessageType.ACKNOWLEDGE,
+        #     "AI has successfully processed the prompt.",
+        #     cell_id=cell_id,
+        # )
+        try:
+            await self._on_cell_source_changes(cell_id, new_source, old_source, username)
+        except asyncio.CancelledError:
+            raise
+        except BaseException as e:
+            error_message = f"Error while processing user prompt: {e!s}"
+            self._log.error(error_message)
+            # await self.notify(
+            #     AIMessageType.ERROR, error_message, cell_id=cell_id
+            # )
+        else:
+            self._log.info("AI processed successfully cell [%s] source changes.", cell_id)
             # await self.notify(
             #     AIMessageType.ACKNOWLEDGE,
             #     "AI has successfully processed the prompt.",
             #     cell_id=cell_id,
             # )
-            try:
-                await self._on_cell_source_changes(cell_id, new_source, old_source, username)
-            except asyncio.CancelledError:
-                raise
-            except BaseException as e:
-                error_message = f"Error while processing user prompt: {e!s}"
-                self._log.error(error_message)
-                # await self.notify(
-                #     AIMessageType.ERROR, error_message, cell_id=cell_id
-                # )
-            else:
-                self._log.info("AI processed successfully cell [%s] source changes.", cell_id)
-                # await self.notify(
-                #     AIMessageType.ACKNOWLEDGE,
-                #     "AI has successfully processed the prompt.",
-                #     cell_id=cell_id,
-                # )
 
     async def __handle_user_prompt(
         self,
@@ -163,40 +160,39 @@ class BaseNbAgent(NbModelClient):
             prompt[:20],
         )
 
-        with self._doc._ydoc.transaction(origin=self._id):
-            # Acknowledge
+        # Acknowledge
+        await self.save_ai_message(
+            AIMessageType.ACKNOWLEDGE,
+            "Requesting AI…",
+            cell_id=cell_id,
+            parent_id=prompt_id,
+        )
+        try:
+            reply = await self._on_user_prompt(cell_id, prompt_id, prompt, username, timestamp)
+        except asyncio.CancelledError:
+            raise
+        except BaseException as e:
+            error_message = "Error while processing user prompt"
+            self._log.error(error_message + " [%s].", prompt_id, exc_info=e)
             await self.save_ai_message(
-                AIMessageType.ACKNOWLEDGE,
-                "Requesting AI…",
+                AIMessageType.ERROR,
+                error_message + f": {e!s}",
                 cell_id=cell_id,
                 parent_id=prompt_id,
             )
-            try:
-                reply = await self._on_user_prompt(cell_id, prompt_id, prompt, username, timestamp)
-            except asyncio.CancelledError:
-                raise
-            except BaseException as e:
-                error_message = "Error while processing user prompt"
-                self._log.error(error_message + " [%s].", prompt_id, exc_info=e)
+        else:
+            self._log.info("AI replied successfully to prompt [%s]: [%s]", prompt_id, reply)
+            if reply is not None:
                 await self.save_ai_message(
-                    AIMessageType.ERROR,
-                    error_message + f": {e!s}",
+                    AIMessageType.REPLY, reply, cell_id=cell_id, parent_id=prompt_id
+                )
+            else:
+                await self.save_ai_message(
+                    AIMessageType.ACKNOWLEDGE,
+                    "AI has successfully processed the prompt.",
                     cell_id=cell_id,
                     parent_id=prompt_id,
                 )
-            else:
-                self._log.info("AI replied successfully to prompt [%s]: [%s]", prompt_id, reply)
-                if reply is not None:
-                    await self.save_ai_message(
-                        AIMessageType.REPLY, reply, cell_id=cell_id, parent_id=prompt_id
-                    )
-                else:
-                    await self.save_ai_message(
-                        AIMessageType.ACKNOWLEDGE,
-                        "AI has successfully processed the prompt.",
-                        cell_id=cell_id,
-                        parent_id=prompt_id,
-                    )
 
     async def _process_doc_events(self) -> None:
         self._log.debug("Starting listening on document [%s] changes…", self.path)
@@ -226,13 +222,13 @@ class BaseNbAgent(NbModelClient):
         if part == "cells":
             for changes in all_changes:
                 transaction_origin = changes.transaction.origin()
-                if transaction_origin == self._id:
+                if transaction_origin == self._changes_origin:
                     continue
                 else:
                     self._log.debug(
                         "Document changes from origin [%s] != agent origin [%s].",
                         transaction_origin,
-                        self._id,
+                        self._changes_origin,
                     )
                 path_length = len(changes.path)
                 if path_length == 0:
@@ -475,7 +471,7 @@ class BaseNbAgent(NbModelClient):
             cell = self.get_cell(cell_id)
             if not cell:
                 raise ValueError(f"Cell [{cell_id}] not found.")
-            with self._doc._ydoc.transaction():
+            with self._doc._ydoc.transaction(origin=self._changes_origin):
                 if "metadata" not in cell:
                     cell["metadata"] = Map({"datalayer": {"ai": {"prompts": [], "messages": []}}})
                 set_message(cell["metadata"], message_dict)
@@ -483,7 +479,7 @@ class BaseNbAgent(NbModelClient):
 
         else:
             notebook_metadata = self._doc._ymeta["metadata"]
-            with self._doc._ydoc.transaction():
+            with self._doc._ydoc.transaction(origin=self._changes_origin):
                 set_message(notebook_metadata, message_dict)
             self._log.debug("Add ai message in notebook metadata: [%s].", cell_id, message_dict)
 

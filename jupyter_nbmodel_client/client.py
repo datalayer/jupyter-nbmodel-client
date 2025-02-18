@@ -27,7 +27,7 @@ from .utils import fetch, url_path_join
 default_logger = logging.getLogger("jupyter_nbmodel_client")
 # Default value taken from uvicorn: https://www.uvicorn.org/#command-line-options
 # Note: the default size for Tornado is 10MB not 16MB
-WEBSOCKETS_MAX_BODY_SIZE = os.environ.get("WEBSOCKETS_MAX_BODY_SIZE", 16 * 1024 * 1024)
+WEBSOCKETS_MAX_BODY_SIZE = int(os.environ.get("WEBSOCKETS_MAX_BODY_SIZE", 16 * 1024 * 1024))
 
 
 def get_jupyter_notebook_websocket_url(
