@@ -24,6 +24,7 @@ pip install jupyter_nbmodel_client
 > [!WARNING]
 > This package requires temporary a dev version of pycrdt. Therefore you will need
 > to install a Rust compiler to install it.
+> Once down, execute `pip install maturin[patchelf]` and then `pip install "pycrdt@git+https://github.com/fcollonval/pycrdt.git@dev"`.
 
 ## Usage
 
