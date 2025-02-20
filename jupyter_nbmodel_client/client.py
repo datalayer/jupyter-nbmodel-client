@@ -7,7 +7,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from urllib.parse import quote, urlencode
 
 from pycrdt import (
     Subscription,
@@ -20,57 +19,12 @@ from pycrdt import (
 )
 from websockets.asyncio.client import ClientConnection, connect
 
-from .constants import HTTP_PROTOCOL_REGEXP, REQUEST_TIMEOUT
+from .constants import DEFAULT_LOGGER, REQUEST_TIMEOUT
 from .model import NotebookModel
-from .utils import fetch, url_path_join
 
-default_logger = logging.getLogger("jupyter_nbmodel_client")
 # Default value taken from uvicorn: https://www.uvicorn.org/#command-line-options
 # Note: the default size for Tornado is 10MB not 16MB
 WEBSOCKETS_MAX_BODY_SIZE = int(os.environ.get("WEBSOCKETS_MAX_BODY_SIZE", 16 * 1024 * 1024))
-
-
-def get_jupyter_notebook_websocket_url(
-    server_url: str,
-    path: str,
-    token: str | None = None,
-    timeout: float = REQUEST_TIMEOUT,
-    log: logging.Logger | None = None,
-) -> str:
-    """Get the websocket endpoint to connect to a collaborative Jupyter notebook.
-
-    Args:
-        server_url: Jupyter Server URL
-        path: Notebook path relative to the server root directory
-        token: [optional] Jupyter Server authentication token; default None
-        timeout: [optional] Request timeout in seconds; default to environment variable REQUEST_TIMEOUT
-        log: [optional] Custom logger; default local logger
-
-    Returns:
-        The websocket endpoint
-    """
-    (log or default_logger).debug("Request the session ID from the server.")
-    # Fetch a session ID
-    response = fetch(
-        url_path_join(server_url, "/api/collaboration/session", quote(path)),
-        token,
-        method="PUT",
-        json={"format": "json", "type": "notebook"},
-        timeout=timeout,
-    )
-
-    response.raise_for_status()
-    content = response.json()
-
-    room_id = f"{content['format']}:{content['type']}:{content['fileId']}"
-
-    base_ws_url = HTTP_PROTOCOL_REGEXP.sub("ws", server_url, 1)
-    room_url = url_path_join(base_ws_url, "api/collaboration/room", room_id)
-    params = {"sessionId": content["sessionId"]}
-    if token is not None:
-        params["token"] = token
-    room_url += "?" + urlencode(params)
-    return room_url
 
 
 class NbModelClient(NotebookModel):
@@ -112,7 +66,7 @@ class NbModelClient(NotebookModel):
         self._path = path or websocket_url
         self._username = username
         self._timeout = timeout
-        self._log = log or default_logger
+        self._log = log or DEFAULT_LOGGER
         self._ws_max_body_size = ws_max_body_size or WEBSOCKETS_MAX_BODY_SIZE
 
         self.__synced = asyncio.Event()
