@@ -21,11 +21,6 @@ To install the library, run the following command.
 pip install jupyter_nbmodel_client
 ```
 
-> [!WARNING]
-> This package requires temporary a dev version of pycrdt. Therefore you will need
-> to install a Rust compiler to install it.
-> Once down, execute `pip install maturin[patchelf]` and then `pip install "pycrdt@git+https://github.com/fcollonval/pycrdt.git@dev"`.
-
 ## Usage
 
 1. Ensure you have the needed packages in your environment to run the example here after.
@@ -64,7 +59,7 @@ from jupyter_kernel_client import KernelClient
 from jupyter_nbmodel_client import NbModelClient, get_jupyter_notebook_websocket_url
 
 with KernelClient(server_url="http://localhost:8888", token="MY_TOKEN") as kernel:
-    with NbModelClient(
+    async with NbModelClient(
         get_jupyter_notebook_websocket_url(
             server_url="http://localhost:8888",
             token="MY_TOKEN",
@@ -105,7 +100,7 @@ plt.show()
 """
 
 with KernelClient(server_url="http://localhost:8888", token="MY_TOKEN") as kernel:
-    with NbModelClient(
+    async with NbModelClient(
         get_jupyter_notebook_websocket_url(
             server_url="http://localhost:8888",
             token="MY_TOKEN",
@@ -139,12 +134,12 @@ try:
             path="test.ipynb"
         )
     )
-    notebook.start()
+    await notebook.start()
     try:
         cell_index = notebook.add_code_cell("print('hello world')")
         results = notebook.execute_cell(cell_index, kernel)
     finally:
-        notebook.stop()
+        await notebook.stop()
 finally:
     kernel.stop()
 ```
