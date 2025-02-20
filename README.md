@@ -144,6 +144,22 @@ finally:
     kernel.stop()
 ```
 
+> [!NOTE]
+> To connect to Datalayer collaborative room, you can use the helper function `get_datalayer_websocket_url`:
+
+```py
+from jupyter_nbmodel_client import NbModelClient, get_datalayer_websocket_url
+
+async with NbModelClient(
+    get_datalayer_websocket_url(
+        server_url=server,
+        room_id=room_id,
+        token=token
+    )
+) as notebook:
+    notebook.add_code_cell(CODE)
+```
+
 ## Uninstall
 
 To remove the library, run the following.

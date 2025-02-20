@@ -43,7 +43,7 @@ def fetch(
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": "Jupyter kernels CLI",
+            "User-Agent": "Jupyter Nbmodel Client",
         }
     if token:
         headers["Authorization"] = f"Bearer {token}"
