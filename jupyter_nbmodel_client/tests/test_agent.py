@@ -4,7 +4,6 @@
 
 import asyncio
 import uuid
-
 from unittest.mock import AsyncMock
 
 from jupyter_nbmodel_client import BaseNbAgent, NbModelClient
@@ -24,7 +23,7 @@ async def test_set_user_prompt(ws_server):
     room_url = f"{ws_server}/{room}"
     async with NbModelClient(room_url) as client:
         async with BaseNbAgent(room_url) as agent:
-            agent._on_user_prompt = AsyncMock()
+            agent._on_user_prompt = AsyncMock(return_value="hello")
             idx = client.add_code_cell("print('hello')")
             client.set_cell_metadata(
                 idx,
@@ -45,7 +44,7 @@ async def test_set_user_prompt(ws_server):
                                 "ai": {
                                     "messages": [
                                         {
-                                            "message": None,
+                                            "message": "hello",
                                             "parent_id": "12345",
                                             "timestamp": content["cells"][0]["metadata"][
                                                 "datalayer"

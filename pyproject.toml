@@ -56,6 +56,7 @@ path = "jupyter_nbmodel_client/__init__.py"
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
 asyncio_mode = "auto"
+addopts = "-p no:unraisableexception"
 filterwarnings = [
   "error",
   "ignore:There is no current event loop:DeprecationWarning",
