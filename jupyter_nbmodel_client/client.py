@@ -7,9 +7,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from collections.abc import Coroutine
+from functools import partial
+from typing import Callable
 
 from pycrdt import (
-    Subscription,
     TransactionEvent,
     YMessageType,
     YSyncMessageType,
@@ -25,6 +27,48 @@ from .model import NotebookModel
 # Default value taken from uvicorn: https://www.uvicorn.org/#command-line-options
 # Note: the default size for Tornado is 10MB not 16MB
 WEBSOCKETS_MAX_BODY_SIZE = int(os.environ.get("WEBSOCKETS_MAX_BODY_SIZE", 16 * 1024 * 1024))
+
+
+def _on_doc_update(
+    queue: asyncio.Queue,
+    event: TransactionEvent,
+) -> None:
+    message = create_update_message(event.update)
+    queue.put_nowait(message)
+
+
+async def _forward_update(
+    websocket: ClientConnection,
+    logger: logging.Logger,
+    queue: asyncio.Queue,
+) -> None:
+    while True:
+        try:
+            message = await queue.get()
+            logger.debug("Forwarding message [%s]", message)
+            await websocket.send(message)
+        except asyncio.CancelledError:
+            raise
+        except BaseException as e:
+            logger.error("Failed to forward update.", exc_info=e)
+            raise
+
+
+async def _listen_to_websocket(
+    websocket: ClientConnection,
+    logger: logging.Logger,
+    on_message: Callable[[bytes], Coroutine[None, None, None]],
+) -> None:
+    while True:
+        try:
+            async for message in websocket:
+                logger.debug("Received message [%s]", message)
+                await on_message(message)
+        except asyncio.CancelledError:
+            raise
+        except BaseException as e:
+            logger.error("Websocket client stopped.", exc_info=e)
+            raise
 
 
 class NbModelClient(NotebookModel):
@@ -52,6 +96,21 @@ class NbModelClient(NotebookModel):
     >>> )
     """
 
+    # Code logic
+    #
+    # The client has at its core a `run` asynchronous method that work similarly as the function you
+    # would execute in a another thread.
+    # In that method, the websocket connection will be opened and background tasks transfering and
+    # processing the messages coming from the websocket and the document model changes will be
+    # created.
+    # When the method `run` is canceled, all the background tasks will be canceled as well and
+    # the connection will be closed.
+    #
+    # Document changes callback is only placing event in a queue as it is a blocking operation.
+    #
+    # When using the client as a context manager or the start/stop methods, the `run` method will be
+    # executed in a task.
+
     def __init__(
         self,
         websocket_url: str,
@@ -70,11 +129,8 @@ class NbModelClient(NotebookModel):
         self._ws_max_body_size = ws_max_body_size or WEBSOCKETS_MAX_BODY_SIZE
 
         self.__synced = asyncio.Event()
-        self.__websocket: ClientConnection | None = None
-        self.__listener: asyncio.Task | None = None
-        self.__forwarder: asyncio.Task | None = None
-        self.__updates_queue: asyncio.Queue[bytes] = asyncio.Queue()
-        self._doc_update_subscription: Subscription | None = None
+        self.__run: asyncio.Task | None = None
+        self.__is_running = False
 
     @property
     def path(self) -> str:
@@ -87,40 +143,46 @@ class NbModelClient(NotebookModel):
         return self.__synced.is_set()
 
     def __del__(self) -> None:
-        if self.__websocket:
-            try:
-                asyncio.create_task(self.stop())
-            except BaseException:
-                pass
+        if self.__run is not None:
+            self.__run.cancel() # Theoritically, this should be awaited
 
     async def __aenter__(self) -> "NbModelClient":
         await self.start()
         return self
 
     async def __aexit__(self, exc_type, exc_value, exc_tb) -> None:
-        self._log.info("Closing the context")
         await self.stop()
 
-    async def start(self) -> None:
-        """Start the client."""
-        if self.__websocket:
-            RuntimeError("NbModelClient is already connected.")
+    async def run(self) -> None:
+        """Run the client."""
+        if self.__is_running:
+            raise RuntimeError("NbModelClient is already connected.")
 
+        self.__is_running = True
         self._log.debug("Starting the websocket connection…")
 
-        self.__websocket = await connect(
+        websocket = await connect(
             self._ws_url,
             user_agent_header="Jupyter NbModel Client",
             logger=self._log,
             max_size=self._ws_max_body_size,
         )
+        updates_queue: asyncio.Queue[bytes] = asyncio.Queue()
 
         # Start listening to incoming message
-        self.__listener = asyncio.create_task(self._listen_to_websocket())
+        listener = asyncio.create_task(
+            _listen_to_websocket(
+                logger=self._log,
+                on_message=partial(self._on_message, websocket),
+                websocket=websocket,
+            )
+        )
 
         # Start listening for model changes
-        self._doc_update_subscription = self._doc.ydoc.observe(self._on_doc_update)
-        self.__forwarder = asyncio.create_task(self._forward_update())
+        doc_update_subscription = self._doc.ydoc.observe(partial(_on_doc_update, updates_queue))
+        forwarder = asyncio.create_task(
+            _forward_update(logger=self._log, websocket=websocket, queue=updates_queue)
+        )
 
         # Synchronize the model
         with self._lock:
@@ -129,7 +191,64 @@ class NbModelClient(NotebookModel):
             "Sending SYNC_STEP1 message for document %s",
             self._path,
         )
-        await self.__websocket.send(sync_message)
+        await websocket.send(sync_message)
+
+        try:
+            # Wait forever and prevent the forwarder to be cancelled to avoid losing changes
+            await asyncio.gather(listener, asyncio.shield(forwarder))
+        finally:
+            self._log.info("Stop the client…")
+
+            # Stop listening to incoming messages
+            if listener.cancel():
+                await asyncio.wait([listener])
+
+            # Stop listening for model changes
+            try:
+                self._doc.ydoc.unobserve(doc_update_subscription)
+            except ValueError as e:
+                if str(e) != "list.remove(x): x not in list":
+                    self._log.error("Failed to unobserve the notebook model.", exc_info=e)
+
+            # Try to propagate the last changes
+            if not forwarder.done():
+                if not updates_queue.empty():
+                    self._log.debug("Propagating the %s last changes…", updates_queue.qsize())
+                    await asyncio.shield(updates_queue.join())
+
+                # Stop forwarding changes
+                if forwarder.cancel():
+                    self._log.debug("Stop forwarding changes…")
+                    await asyncio.wait([forwarder])
+
+            # Reset the model
+            self._reset_y_model()
+            self.__synced.clear()
+
+            # Close the websocket
+            if websocket:
+                try:
+                    await websocket.close()
+                except BaseException as e:
+                    self._log.error("Unable to close the websocket connection.", exc_info=e)
+                    raise
+                finally:
+                    self._log.debug("Websocket connection closed.")
+                    websocket = None
+
+            self.__is_running = False
+
+    async def start(self) -> None:
+        """Start the client."""
+        if self.__run is not None:
+            raise RuntimeError("The client is already connected.")
+
+        self.__run = asyncio.create_task(self.run())
+
+        def callback(_: asyncio.Task) -> None:
+            self.__run = None
+
+        self.__run.add_done_callback(callback)
 
         self._log.debug("Waiting for model synchronization…")
         try:
@@ -141,44 +260,14 @@ class NbModelClient(NotebookModel):
 
     async def stop(self) -> None:
         """Stop and reset the client."""
-        # Reset the notebook
-        self._log.info("Disposing NbModelClient…")
+        if self.__run is not None and self.__run.cancel():
+            await asyncio.wait([self.__run])
 
-        if self.__listener:
-            self.__listener.cancel()
-            self.__listener = None
+    async def wait_until_synced(self) -> None:
+        """Wait until the model is synced."""
+        await self.__synced.wait()
 
-        if self._doc_update_subscription:
-            try:
-                self._doc.ydoc.unobserve(self._doc_update_subscription)
-            except ValueError as e:
-                if str(e) != "list.remove(x): x not in list":
-                    self._log.error("Failed to unobserve the notebook model.", exc_info=e)
-            finally:
-                self._doc_update_subscription = None
-
-        # Empty queue
-        while not self.__updates_queue.empty():
-            self.__updates_queue.get_nowait()
-
-        if self.__forwarder:
-            self.__forwarder.cancel()
-            self.__forwarder = None
-
-        # Reset the model
-        self._reset_y_model()
-
-        # Close the websocket
-        if self.__websocket:
-            try:
-                await self.__websocket.close()
-            except BaseException as e:
-                self._log.error("Unable to close the websocket connection.", exc_info=e)
-                raise
-            finally:
-                self.__websocket = None
-
-    async def _on_message(self, message: bytes) -> None:
+    async def _on_message(self, websocket: ClientConnection, message: bytes) -> None:
         if message[0] == YMessageType.SYNC:
             self._log.debug(
                 "Received %s message from document %s",
@@ -195,41 +284,4 @@ class NbModelClient(NotebookModel):
                     "Sending SYNC_STEP2 message to document %s",
                     self._path,
                 )
-                await self.__websocket.send(reply)
-
-    def _on_doc_update(self, event: TransactionEvent) -> None:
-        if not self.__websocket:
-            self._log.debug(
-                "Ignoring document %s update prior to websocket connection.", self._path
-            )
-            return
-        update = event.update
-        message = create_update_message(update)
-        self.__updates_queue.put_nowait(message)
-
-    async def _listen_to_websocket(self) -> None:
-        if self.__websocket is None:
-            self._log.error("No websocket defined.")
-            return
-
-        while True:
-            try:
-                async for message in self.__websocket:
-                    self._log.debug("Received message [%s]", message)
-                    await self._on_message(message)
-            except asyncio.CancelledError:
-                break
-            except BaseException as e:
-                self._log.error("Websocket client stopped.", exc_info=e)
-                break
-
-    async def _forward_update(self) -> None:
-        while True:
-            try:
-                message = await self.__updates_queue.get()
-                self._log.debug("Forwarding message [%s]", message)
-                await self.__websocket.send(message)
-            except asyncio.CancelledError:
-                break
-            except BaseException as e:
-                self._log.error("Failed to forward update.", exc_info=e)
+                await websocket.send(reply)

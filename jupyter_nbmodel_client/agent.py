@@ -96,20 +96,26 @@ class BaseNbAgent(NbModelClient):
     ) -> None:
         super().__init__(websocket_url, path, username, timeout, log)
         self._doc_events: asyncio.Queue[dict] = asyncio.Queue()
-        self._events_worker: asyncio.Task | None = None
 
-    async def start(self) -> None:
-        await super().start()
-        self._events_worker = asyncio.create_task(self._process_doc_events())
-
-    async def stop(self) -> None:
-        await super().stop()
-        if self._events_worker:
-            self._events_worker.cancel()
-            self._events_worker = None
-
-        while not self._doc_events.empty():
-            self._doc_events.get_nowait()
+    async def run(self) -> None:
+        self._doc.observe(self._on_notebook_changes)
+        events_worker: asyncio.Task | None = None
+        try:
+            events_worker = asyncio.create_task(self._process_doc_events())
+            await super().run()
+        finally:
+            self._log.info("Stop the agent.")
+            if events_worker and not events_worker.done():
+                if not self._doc_events.empty():
+                    await self._doc_events.join()
+                if events_worker.cancel():
+                    await asyncio.wait([events_worker])
+            else:
+                try:
+                    while True:
+                        self._doc_events.get_nowait()
+                except asyncio.QueueEmpty:
+                    ...
 
     async def __handle_cell_source_changes(
         self,
@@ -127,9 +133,7 @@ class BaseNbAgent(NbModelClient):
         #     cell_id=cell_id,
         # )
         try:
-            await self._on_cell_source_changes(
-                cell_id, new_source, old_source, username
-            )
+            await self._on_cell_source_changes(cell_id, new_source, old_source, username)
         except asyncio.CancelledError:
             raise
         except BaseException as e:
@@ -139,9 +143,7 @@ class BaseNbAgent(NbModelClient):
             #     AIMessageType.ERROR, error_message, cell_id=cell_id
             # )
         else:
-            self._log.info(
-                "AI processed successfully cell [%s] source changes.", cell_id
-            )
+            self._log.info("AI processed successfully cell [%s] source changes.", cell_id)
             # await self.notify(
             #     AIMessageType.ACKNOWLEDGE,
             #     "AI has successfully processed the prompt.",
@@ -158,7 +160,7 @@ class BaseNbAgent(NbModelClient):
     ) -> None:
         self._log.info("Received user [%s] prompt [%s].", username, prompt_id)
         self._log.debug(
-            "Prompt: timestamp [%d] / cell_id [%s] / prompt [%s]",
+            "Prompt: timestamp [%s] / cell_id [%s] / prompt [%s]",
             timestamp,
             cell_id,
             prompt[:20],
@@ -172,9 +174,7 @@ class BaseNbAgent(NbModelClient):
             parent_id=prompt_id,
         )
         try:
-            reply = await self._on_user_prompt(
-                cell_id, prompt_id, prompt, username, timestamp
-            )
+            reply = await self._on_user_prompt(cell_id, prompt_id, prompt, username, timestamp)
         except asyncio.CancelledError:
             raise
         except BaseException as e:
@@ -187,9 +187,7 @@ class BaseNbAgent(NbModelClient):
                 parent_id=prompt_id,
             )
         else:
-            self._log.info(
-                "AI replied successfully to prompt [%s]: [%s]", prompt_id, reply
-            )
+            self._log.info("AI replied successfully to prompt [%s]: [%s]", prompt_id, reply)
             if reply is not None:
                 await self.save_ai_message(
                     AIMessageType.REPLY, reply, cell_id=cell_id, parent_id=prompt_id
@@ -215,9 +213,7 @@ class BaseNbAgent(NbModelClient):
             except asyncio.CancelledError:
                 raise
             except BaseException as e:
-                self._log.error(
-                    "Error while processing document events: %s", exc_info=e
-                )
+                self._log.error("Error while processing document events: %s", exc_info=e)
             else:
                 # Sleep to get a chance to propagate changes through the websocket
                 await asyncio.sleep(0)
@@ -249,9 +245,7 @@ class BaseNbAgent(NbModelClient):
                             for cell in delta["insert"]:
                                 if "metadata" in cell:
                                     new_metadata = cell["metadata"]
-                                    datalayer_ia = new_metadata.get(
-                                        "datalayer", {}
-                                    ).get("ai", {})
+                                    datalayer_ia = new_metadata.get("datalayer", {}).get("ai", {})
                                     prompts = datalayer_ia.get("prompts", [])
                                     prompt_ids = {prompt["id"] for prompt in prompts}
                                     new_prompts = prompt_ids.difference(
@@ -270,9 +264,7 @@ class BaseNbAgent(NbModelClient):
                                                     "prompt_id": prompt["id"],
                                                     "prompt": prompt["prompt"],
                                                     "username": prompt.get("user"),
-                                                    "timestamp": prompt.get(
-                                                        "timestamp"
-                                                    ),
+                                                    "timestamp": prompt.get("timestamp"),
                                                 }
                                             )
                                 if "source" in cell:
@@ -317,19 +309,14 @@ class BaseNbAgent(NbModelClient):
                                 )
                         elif key == "metadata":
                             new_metadata = change.get("newValue", {})
-                            datalayer_ia = new_metadata.get("datalayer", {}).get(
-                                "ai", {}
-                            )
+                            datalayer_ia = new_metadata.get("datalayer", {}).get("ai", {})
                             prompts = datalayer_ia.get("prompts", [])
                             prompt_ids = {prompt["id"] for prompt in prompts}
                             new_prompts = prompt_ids.difference(
-                                message["parent_id"]
-                                for message in datalayer_ia.get("messages", [])
+                                message["parent_id"] for message in datalayer_ia.get("messages", [])
                             )
                             if new_prompts and change["action"] in {"add", "update"}:
-                                for prompt in filter(
-                                    lambda p: p.get("id") in new_prompts, prompts
-                                ):
+                                for prompt in filter(lambda p: p.get("id") in new_prompts, prompts):
                                     self._doc_events.put_nowait(
                                         {
                                             "type": "user",
@@ -358,19 +345,14 @@ class BaseNbAgent(NbModelClient):
                             prompts = datalayer_ia.get("prompts")
                             prompt_ids = {prompt["id"] for prompt in prompts}
                             new_prompts = prompt_ids.difference(
-                                message["parent_id"]
-                                for message in datalayer_ia.get("messages", [])
+                                message["parent_id"] for message in datalayer_ia.get("messages", [])
                             )
                             if new_prompts and change["action"] in {"add", "update"}:
-                                for prompt in filter(
-                                    lambda p: p.get("id") in new_prompts, prompts
-                                ):
+                                for prompt in filter(lambda p: p.get("id") in new_prompts, prompts):
                                     self._doc_events.put_nowait(
                                         {
                                             "type": "user",
-                                            "cell_id": self._doc.ycells[
-                                                changes.path[0]
-                                            ]["id"],
+                                            "cell_id": self._doc.ycells[changes.path[0]]["id"],
                                             "prompt_id": prompt["id"],
                                             "prompt": prompt["prompt"],
                                             "username": prompt.get("user"),
@@ -390,7 +372,6 @@ class BaseNbAgent(NbModelClient):
             pass
         finally:
             super()._reset_y_model()
-            self._doc.observe(self._on_notebook_changes)
 
     async def _on_user_prompt(
         self,
@@ -413,9 +394,7 @@ class BaseNbAgent(NbModelClient):
             Optional agent reply to display to the user.
         """
         username = username or self._username
-        self._log.debug(
-            "New AI prompt sets by user [%s] in [%s]: [%s].", username, cell_id, prompt
-        )
+        self._log.debug("New AI prompt sets by user [%s] in [%s]: [%s].", username, cell_id, prompt)
 
     async def _on_cell_source_changes(
         self,
@@ -502,9 +481,7 @@ class BaseNbAgent(NbModelClient):
             dlai["messages"] = messages
             dla["ai"] = dlai
             if "datalayer" in metadata:
-                del metadata[
-                    "datalayer"
-                ]  # FIXME upstream - update of key is not possible 😱
+                del metadata["datalayer"]  # FIXME upstream - update of key is not possible 😱
             metadata["datalayer"] = dla.copy()
 
         if cell_id:
@@ -513,21 +490,15 @@ class BaseNbAgent(NbModelClient):
                 raise ValueError(f"Cell [{cell_id}] not found.")
             with self._doc._ydoc.transaction(origin=self._changes_origin):
                 if "metadata" not in cell:
-                    cell["metadata"] = Map(
-                        {"datalayer": {"ai": {"prompts": [], "messages": []}}}
-                    )
+                    cell["metadata"] = Map({"datalayer": {"ai": {"prompts": [], "messages": []}}})
                 set_message(cell["metadata"], message_dict)
-            self._log.debug(
-                "Add ai message in cell [%s] metadata: [%s].", cell_id, message_dict
-            )
+            self._log.debug("Add ai message in cell [%s] metadata: [%s].", cell_id, message_dict)
 
         else:
             notebook_metadata = self._doc._ymeta["metadata"]
             with self._doc._ydoc.transaction(origin=self._changes_origin):
                 set_message(notebook_metadata, message_dict)
-            self._log.debug(
-                "Add ai message in notebook metadata: [%s].", cell_id, message_dict
-            )
+            self._log.debug("Add ai message in notebook metadata: [%s].", cell_id, message_dict)
 
         # Sleep to get a chance to propagate the changes through the websocket
         await asyncio.sleep(0)

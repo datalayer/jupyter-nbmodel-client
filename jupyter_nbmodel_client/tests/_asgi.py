@@ -3,11 +3,14 @@
 # BSD 3-Clause License
 
 import asyncio
+import logging
 import os
 
 from hypercorn import Config
 from hypercorn.asyncio import serve
 from pycrdt_websocket import ASGIServer, WebsocketServer
+
+# logging.basicConfig(level=logging.DEBUG)
 
 
 async def main():
