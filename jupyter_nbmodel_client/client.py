@@ -9,9 +9,10 @@ import logging
 import os
 from collections.abc import Coroutine
 from functools import partial
-from typing import Callable
+from typing import Any, Callable, cast
 
 from pycrdt import (
+    Awareness,
     TransactionEvent,
     YMessageType,
     YSyncMessageType,
@@ -21,6 +22,7 @@ from pycrdt import (
 )
 from websockets.asyncio.client import ClientConnection, connect
 
+from ._version import VERSION
 from .constants import DEFAULT_LOGGER, REQUEST_TIMEOUT
 from .model import NotebookModel
 
@@ -111,6 +113,8 @@ class NbModelClient(NotebookModel):
     # When using the client as a context manager or the start/stop methods, the `run` method will be
     # executed in a task.
 
+    user_agent: str = f"Datalayer-NbModelClient/{VERSION}"
+
     def __init__(
         self,
         websocket_url: str,
@@ -144,7 +148,7 @@ class NbModelClient(NotebookModel):
 
     def __del__(self) -> None:
         if self.__run is not None:
-            self.__run.cancel() # Theoritically, this should be awaited
+            self.__run.cancel()  # Theoritically, this should be awaited
 
     async def __aenter__(self) -> "NbModelClient":
         await self.start()
@@ -184,6 +188,20 @@ class NbModelClient(NotebookModel):
             _forward_update(logger=self._log, websocket=websocket, queue=updates_queue)
         )
 
+        # Set local state
+        self.set_local_state_field(
+            "user",
+            {
+                "agent": self.user_agent,
+                "name": self._username,
+                "client_id": websocket.id,
+                "address": websocket.remote_address,
+            },
+        )
+
+        # Start the awareness regular ping
+        awareness_ping = asyncio.create_task(self._doc.awareness._start())
+
         # Synchronize the model
         with self._lock:
             sync_message = create_sync_message(self._doc.ydoc)
@@ -195,7 +213,7 @@ class NbModelClient(NotebookModel):
 
         try:
             # Wait forever and prevent the forwarder to be cancelled to avoid losing changes
-            await asyncio.gather(listener, asyncio.shield(forwarder))
+            await asyncio.gather(awareness_ping, listener, asyncio.shield(forwarder))
         finally:
             self._log.info("Stop the client…")
 
@@ -237,6 +255,31 @@ class NbModelClient(NotebookModel):
                     websocket = None
 
             self.__is_running = False
+
+    def get_local_client_id(self) -> int:
+        """Get the local client ID.
+
+        Returns:
+            The local client ID.
+        """
+        return cast(Awareness, self._doc.awareness).client_id
+
+    def get_peer_states(self) -> dict[int, dict[str, Any]]:
+        """Get the connected peer client states.
+
+        Returns:
+            A dictionary of the connected peer client states.
+        """
+        return cast(Awareness, self._doc.awareness).states
+
+    def set_local_state_field(self, key: str, value: Any) -> None:
+        """Sets a local state field to be shared between clients.
+
+        Args:
+            field: The field of the local state to set.
+            value: The value associated with the field.
+        """
+        cast(Awareness, self._doc.awareness).set_local_state_field(key, value)
 
     async def start(self) -> None:
         """Start the client."""

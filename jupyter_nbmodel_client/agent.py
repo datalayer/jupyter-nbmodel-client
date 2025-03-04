@@ -12,10 +12,10 @@ from datetime import datetime, timezone
 from enum import IntEnum
 from logging import Logger
 from typing import Any, Literal, cast
-from uuid import uuid4
 
 from pycrdt import ArrayEvent, Map, MapEvent
 
+from ._version import VERSION
 from .client import REQUEST_TIMEOUT, NbModelClient
 
 
@@ -62,6 +62,7 @@ class BaseNbAgent(NbModelClient):
             Callback on user prompt, it may return an AI reply and must raise an error in case of failure
         - method:`async _on_cell_source_changes(self, cell_id: str, new_source: str, old_source: str, username: str | None = None) -> None`:
             Callback on cell source changes, it must raise an error in case of failure
+      - Agents can sent transient messages to users through the method:`async notify(self, message: str, cell_id: str = "", message_type: AIMessageType = AIMessageType.ACKNOWLEDGE) -> None`
 
     Args:
         ws_url: Endpoint to connect to the collaborative Jupyter notebook.
@@ -84,6 +85,8 @@ class BaseNbAgent(NbModelClient):
     >>>     )
     >>> )
     """
+
+    user_agent: str = f"Datalayer-BaseNbAgent/{VERSION}"
 
     # FIXME implement username retrieval
     def __init__(
@@ -127,11 +130,10 @@ class BaseNbAgent(NbModelClient):
         self._log.info("Process user [%s] cell [%s] source changes.", username, cell_id)
 
         # Acknowledge through awareness
-        # await self.notify(
-        #     AIMessageType.ACKNOWLEDGE,
-        #     "AI has successfully processed the prompt.",
-        #     cell_id=cell_id,
-        # )
+        await self.notify(
+            "AI has successfully processed the prompt.",
+            cell_id=cell_id,
+        )
         try:
             await self._on_cell_source_changes(cell_id, new_source, old_source, username)
         except asyncio.CancelledError:
@@ -139,16 +141,13 @@ class BaseNbAgent(NbModelClient):
         except BaseException as e:
             error_message = f"Error while processing user prompt: {e!s}"
             self._log.error(error_message)
-            # await self.notify(
-            #     AIMessageType.ERROR, error_message, cell_id=cell_id
-            # )
+            await self.notify(error_message, cell_id=cell_id, message_type=AIMessageType.ERROR)
         else:
             self._log.info("AI processed successfully cell [%s] source changes.", cell_id)
-            # await self.notify(
-            #     AIMessageType.ACKNOWLEDGE,
-            #     "AI has successfully processed the prompt.",
-            #     cell_id=cell_id,
-            # )
+            await self.notify(
+                "AI has successfully processed the prompt.",
+                cell_id=cell_id,
+            )
 
     async def __handle_user_prompt(
         self,
@@ -503,12 +502,26 @@ class BaseNbAgent(NbModelClient):
         # Sleep to get a chance to propagate the changes through the websocket
         await asyncio.sleep(0)
 
-    # async def notify(self, message: str, cell_id: str = "") -> None:
-    #     """Send a transient message to users.
+    async def notify(
+        self,
+        message: str,
+        cell_id: str = "",
+        message_type: AIMessageType = AIMessageType.ACKNOWLEDGE,
+    ) -> None:
+        """Send a transient message to users.
 
-    #     Args:
-    #         message: Notification message
-    #         cell_id: Cell targeted by the notification; if empty the notebook is the target
-    #     """
-    #     # Sleep to get a chance to propagate the changes through the websocket
-    #     await asyncio.sleep(0)
+        Args:
+            message: Notification message
+            cell_id: Cell targeted by the notification; if empty the notebook is the target
+        """
+        self.set_local_state_field(
+            "notification",
+            {
+                "message": message,
+                "message_type": message_type,
+                "timestamp": timestamp(),
+                "cell_id": cell_id,
+            },
+        )
+        # Sleep to get a chance to propagate the changes through the websocket
+        await asyncio.sleep(0)

@@ -51,7 +51,7 @@ Home = "https://github.com/datalayer/jupyter-nbmodel-client"
 allow-direct-references = true
 
 [tool.hatch.version]
-path = "jupyter_nbmodel_client/__init__.py"
+path = "jupyter_nbmodel_client/_version.py"
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"

@@ -448,4 +448,6 @@ class NotebookModel(MutableSequence):
 
     def _reset_y_model(self) -> None:
         """Reset the Y model."""
-        self._doc = YNotebook()
+        doc = pycrdt.Doc()
+        awareness = pycrdt.Awareness(doc)
+        self._doc = YNotebook(ydoc=doc, awareness=awareness)
