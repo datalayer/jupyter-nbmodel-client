@@ -114,6 +114,7 @@ class NbModelClient(NotebookModel):
     # executed in a task.
 
     user_agent: str = f"Datalayer-NbModelClient/{VERSION}"
+    """User agent used to identify the client type in the awareness state."""
 
     def __init__(
         self,
@@ -194,7 +195,7 @@ class NbModelClient(NotebookModel):
             {
                 "agent": self.user_agent,
                 "name": self._username,
-                "client_id": websocket.id,
+                "ws_client_id": websocket.id,
                 "address": websocket.remote_address,
             },
         )
@@ -259,6 +260,8 @@ class NbModelClient(NotebookModel):
     def get_local_client_id(self) -> int:
         """Get the local client ID.
 
+        This is the identifier of the client communicated to all peers.
+
         Returns:
             The local client ID.
         """
@@ -273,7 +276,7 @@ class NbModelClient(NotebookModel):
         return cast(Awareness, self._doc.awareness).states
 
     def set_local_state_field(self, key: str, value: Any) -> None:
-        """Sets a local state field to be shared between clients.
+        """Sets a local state field to be shared between peer clients.
 
         Args:
             field: The field of the local state to set.

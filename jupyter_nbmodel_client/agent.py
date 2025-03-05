@@ -11,9 +11,9 @@ import os
 from datetime import datetime, timezone
 from enum import IntEnum
 from logging import Logger
-from typing import Any, Literal, cast
+from typing import Any, Literal, TypedDict, cast
 
-from pycrdt import ArrayEvent, Map, MapEvent
+from pycrdt import ArrayEvent, Awareness, Map, MapEvent
 
 from ._version import VERSION
 from .client import REQUEST_TIMEOUT, NbModelClient
@@ -33,6 +33,24 @@ class AIMessageType(IntEnum):
     """Prompt is being processed."""
     REPLY = 1
     """AI reply."""
+
+
+class PeerChanges(TypedDict):
+    added: list[int]
+    """List of peer ids added."""
+    removed: list[int]
+    """List of peer ids removed."""
+    updated: list[int]
+    """List of peer ids updated."""
+
+
+class PeerEvent(TypedDict):
+    type: Literal["change", "update"]
+    """Event type; "change" if the peer state changes, "update" if the peer state is updated even if unchanged."""
+    changes: PeerChanges
+    """Peer changes."""
+    origin: Literal["local"] | str
+    """Event origin; "local" if emitted by itself, the peer id otherwise."""
 
 
 # def _debug_print_changes(part: str, changes: Any) -> None:
@@ -99,24 +117,41 @@ class BaseNbAgent(NbModelClient):
     ) -> None:
         super().__init__(websocket_url, path, username, timeout, log)
         self._doc_events: asyncio.Queue[dict] = asyncio.Queue()
+        self._peer_events: asyncio.Queue[PeerEvent] = asyncio.Queue()
 
     async def run(self) -> None:
         self._doc.observe(self._on_notebook_changes)
-        events_worker: asyncio.Task | None = None
+        awareness_callback = cast(Awareness, self._doc.awareness).observe(self._on_peer_changes)
+        doc_events_worker: asyncio.Task | None = None
+        peer_events_worker: asyncio.Task | None = None
         try:
-            events_worker = asyncio.create_task(self._process_doc_events())
+            doc_events_worker = asyncio.create_task(self._process_doc_events())
+            peer_events_worker = asyncio.create_task(self._process_peer_events())
             await super().run()
         finally:
             self._log.info("Stop the agent.")
-            if events_worker and not events_worker.done():
+            cast(Awareness, self._doc.awareness).unobserve(awareness_callback)
+            if doc_events_worker and not doc_events_worker.done():
                 if not self._doc_events.empty():
                     await self._doc_events.join()
-                if events_worker.cancel():
-                    await asyncio.wait([events_worker])
+                if doc_events_worker.cancel():
+                    await asyncio.wait([doc_events_worker])
             else:
                 try:
                     while True:
                         self._doc_events.get_nowait()
+                except asyncio.QueueEmpty:
+                    ...
+
+            if peer_events_worker and not peer_events_worker.done():
+                if not self._peer_events.empty():
+                    await self._peer_events.join()
+                if peer_events_worker.cancel():
+                    await asyncio.wait([peer_events_worker])
+            else:
+                try:
+                    while True:
+                        self._peer_events.get_nowait()
                 except asyncio.QueueEmpty:
                     ...
 
@@ -407,6 +442,30 @@ class BaseNbAgent(NbModelClient):
 
     # async def _on_cell_outputs_changes(self, *args) -> None:
     #     print(args)
+
+    async def _process_peer_events(self) -> None:
+        while True:
+            try:
+                event = await self._peer_events.get()
+                await self._on_peer_event(event)
+            except asyncio.CancelledError:
+                raise
+            except BaseException as e:
+                self._log.error("Error while processing peer events: %s", exc_info=e)
+            else:
+                # Sleep to get a chance to propagate changes through the websocket
+                await asyncio.sleep(0)
+
+    def _on_peer_changes(self, event_type: str, changes: tuple[dict, Any]) -> None:
+        self._peer_events.put_nowait(
+            cast(PeerEvent, {"type": event_type, "changes": changes[0], "origin": changes[1]})
+        )
+
+    async def _on_peer_event(self, event: PeerEvent) -> None:
+        """Callback on peer awareness events."""
+        self._log.debug(
+            "New event from peer [%s]: %s - %s", event["origin"], event["type"], event["changes"]
+        )
 
     def get_cell(self, cell_id: str) -> Map | None:
         """Find the cell with the given ID.
