@@ -16,6 +16,7 @@ from pycrdt import (
     TransactionEvent,
     YMessageType,
     YSyncMessageType,
+    create_awareness_message,
     create_sync_message,
     create_update_message,
     handle_sync_message,
@@ -39,10 +40,28 @@ def _on_doc_update(
     queue.put_nowait(message)
 
 
-async def _forward_update(
+def _on_awareness_event(
+    awareness: Awareness,
+    queue: asyncio.Queue,
+    event_type: str,
+    changes: tuple[dict[str, Any], Any],
+) -> None:
+    # Skip non-update awareness changes and non-local changes;
+    # aka broadcast only local update
+    if event_type != "update" or changes[1] != "local":
+        return
+
+    updated_clients = [v for value in changes[0].values() for v in value]
+    state = awareness.encode_awareness_update(updated_clients)
+    message = create_awareness_message(state)
+
+    queue.put_nowait(message)
+
+
+async def _send_messages(
     websocket: ClientConnection,
     logger: logging.Logger,
-    queue: asyncio.Queue,
+    queue: asyncio.Queue[bytes],
 ) -> None:
     while True:
         try:
@@ -52,7 +71,7 @@ async def _forward_update(
         except asyncio.CancelledError:
             raise
         except BaseException as e:
-            logger.error("Failed to forward update.", exc_info=e)
+            logger.error("Failed to forward message.", exc_info=e)
             raise
 
 
@@ -172,7 +191,7 @@ class NbModelClient(NotebookModel):
             logger=self._log,
             max_size=self._ws_max_body_size,
         )
-        updates_queue: asyncio.Queue[bytes] = asyncio.Queue()
+        messages_queue: asyncio.Queue[bytes] = asyncio.Queue()
 
         # Start listening to incoming message
         listener = asyncio.create_task(
@@ -183,10 +202,12 @@ class NbModelClient(NotebookModel):
             )
         )
 
-        # Start listening for model changes
-        doc_update_subscription = self._doc.ydoc.observe(partial(_on_doc_update, updates_queue))
-        forwarder = asyncio.create_task(
-            _forward_update(logger=self._log, websocket=websocket, queue=updates_queue)
+        # Start listening for doc changes
+        doc_observer = self._doc.ydoc.observe(partial(_on_doc_update, messages_queue))
+
+        # Start listening for awareness updates
+        awareness_observer = cast(Awareness, self._doc.awareness).observe(
+            partial(_on_awareness_event, cast(Awareness, self._doc.awareness), messages_queue)
         )
 
         # Set local state
@@ -203,6 +224,11 @@ class NbModelClient(NotebookModel):
         # Start the awareness regular ping
         awareness_ping = asyncio.create_task(self._doc.awareness._start())
 
+        # Start forwarding document and awareness messages through the websocket
+        sender = asyncio.create_task(
+            _send_messages(logger=self._log, websocket=websocket, queue=messages_queue)
+        )
+
         # Synchronize the model
         with self._lock:
             sync_message = create_sync_message(self._doc.ydoc)
@@ -214,7 +240,7 @@ class NbModelClient(NotebookModel):
 
         try:
             # Wait forever and prevent the forwarder to be cancelled to avoid losing changes
-            await asyncio.gather(awareness_ping, listener, asyncio.shield(forwarder))
+            await asyncio.gather(awareness_ping, listener, asyncio.shield(sender))
         finally:
             self._log.info("Stop the client…")
 
@@ -222,23 +248,26 @@ class NbModelClient(NotebookModel):
             if listener.cancel():
                 await asyncio.wait([listener])
 
-            # Stop listening for model changes
+            # Stop listening for awareness updates
+            cast(Awareness, self._doc.awareness).unobserve(awareness_observer)
+
+            # Stop listening for document changes
             try:
-                self._doc.ydoc.unobserve(doc_update_subscription)
+                self._doc.ydoc.unobserve(doc_observer)
             except ValueError as e:
                 if str(e) != "list.remove(x): x not in list":
                     self._log.error("Failed to unobserve the notebook model.", exc_info=e)
 
             # Try to propagate the last changes
-            if not forwarder.done():
-                if not updates_queue.empty():
-                    self._log.debug("Propagating the %s last changes…", updates_queue.qsize())
-                    await asyncio.shield(updates_queue.join())
+            if not sender.done():
+                if not messages_queue.empty():
+                    self._log.debug("Propagating the %s last changes…", messages_queue.qsize())
+                    await asyncio.shield(messages_queue.join())
 
                 # Stop forwarding changes
-                if forwarder.cancel():
+                if sender.cancel():
                     self._log.debug("Stop forwarding changes…")
-                    await asyncio.wait([forwarder])
+                    await asyncio.wait([sender])
 
             # Reset the model
             self._reset_y_model()
