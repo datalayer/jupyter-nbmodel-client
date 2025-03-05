@@ -45,8 +45,9 @@ class PeerChanges(TypedDict):
 
 
 class PeerEvent(TypedDict):
-    type: Literal["change", "update"]
-    """Event type; "change" if the peer state changes, "update" if the peer state is updated even if unchanged."""
+    # Only trigger on change to avoid high callback pressure
+    # type: Literal["change", "update"]
+    # """Event type; "change" if the peer state changes, "update" if the peer state is updated even if unchanged."""
     changes: PeerChanges
     """Peer changes."""
     origin: Literal["local"] | str
@@ -105,8 +106,8 @@ class BaseNbAgent(NbModelClient):
     """
 
     user_agent: str = f"Datalayer-BaseNbAgent/{VERSION}"
+    """User agent used to identify the client type in the awareness state."""
 
-    # FIXME implement username retrieval
     def __init__(
         self,
         websocket_url: str,
@@ -164,25 +165,25 @@ class BaseNbAgent(NbModelClient):
     ) -> None:
         self._log.info("Process user [%s] cell [%s] source changes.", username, cell_id)
 
-        # Acknowledge through awareness
-        await self.notify(
-            "AI has successfully processed the prompt.",
-            cell_id=cell_id,
-        )
+        # # Acknowledge through awareness
+        # await self.notify(
+        #     "Analyzing source changes…",
+        #     cell_id=cell_id,
+        # )
         try:
             await self._on_cell_source_changes(cell_id, new_source, old_source, username)
         except asyncio.CancelledError:
             raise
         except BaseException as e:
-            error_message = f"Error while processing user prompt: {e!s}"
+            error_message = f"Error while analyzing cell source: {e!s}"
             self._log.error(error_message)
-            await self.notify(error_message, cell_id=cell_id, message_type=AIMessageType.ERROR)
+            # await self.notify(error_message, cell_id=cell_id, message_type=AIMessageType.ERROR)
         else:
             self._log.info("AI processed successfully cell [%s] source changes.", cell_id)
-            await self.notify(
-                "AI has successfully processed the prompt.",
-                cell_id=cell_id,
-            )
+            # await self.notify(
+            #     "Source changes analyzed.",
+            #     cell_id=cell_id,
+            # )
 
     async def __handle_user_prompt(
         self,
@@ -210,6 +211,12 @@ class BaseNbAgent(NbModelClient):
         try:
             reply = await self._on_user_prompt(cell_id, prompt_id, prompt, username, timestamp)
         except asyncio.CancelledError:
+            await self.save_ai_message(
+                AIMessageType.ERROR,
+                "Prompt request cancelled.",
+                cell_id=cell_id,
+                parent_id=prompt_id,
+            )
             raise
         except BaseException as e:
             error_message = "Error while processing user prompt"
@@ -457,14 +464,15 @@ class BaseNbAgent(NbModelClient):
                 await asyncio.sleep(0)
 
     def _on_peer_changes(self, event_type: str, changes: tuple[dict, Any]) -> None:
-        self._peer_events.put_nowait(
-            cast(PeerEvent, {"type": event_type, "changes": changes[0], "origin": changes[1]})
-        )
+        if event_type != "udpate":
+            self._peer_events.put_nowait(
+                cast(PeerEvent, {"changes": changes[0], "origin": changes[1]})
+            )
 
     async def _on_peer_event(self, event: PeerEvent) -> None:
         """Callback on peer awareness events."""
         self._log.debug(
-            "New event from peer [%s]: %s - %s", event["origin"], event["type"], event["changes"]
+            "New event from peer [%s]: %s - %s", event["origin"], event["changes"]
         )
 
     def get_cell(self, cell_id: str) -> Map | None:

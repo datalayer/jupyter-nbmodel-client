@@ -215,8 +215,7 @@ class NbModelClient(NotebookModel):
             "user",
             {
                 "agent": self.user_agent,
-                "name": self._username,
-                "ws_client_id": str(websocket.id),
+                "owner": self._username,
                 "address": str(websocket.remote_address),
             },
         )
@@ -296,13 +295,26 @@ class NbModelClient(NotebookModel):
         """
         return cast(Awareness, self._doc.awareness).client_id
 
-    def get_peer_states(self) -> dict[int, dict[str, Any]]:
+    def get_connected_peers(self) -> list[int]:
+        """Get the connected peer client IDs.
+
+        Returns:
+            A list of the connected peer client IDs.
+        """
+        local_id = self.get_local_client_id()
+        return [
+            client_id
+            for client_id in cast(Awareness, self._doc.awareness).states
+            if client_id != local_id
+        ]
+
+    def get_peer_state(self, client_id: int) -> dict[str, Any] | None:
         """Get the connected peer client states.
 
         Returns:
             A dictionary of the connected peer client states.
         """
-        return cast(Awareness, self._doc.awareness).states
+        return cast(Awareness, self._doc.awareness).states.get(client_id)
 
     def set_local_state_field(self, key: str, value: Any) -> None:
         """Sets a local state field to be shared between peer clients.
