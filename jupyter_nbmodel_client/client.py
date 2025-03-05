@@ -216,8 +216,8 @@ class NbModelClient(NotebookModel):
             {
                 "agent": self.user_agent,
                 "name": self._username,
-                "ws_client_id": websocket.id,
-                "address": websocket.remote_address,
+                "ws_client_id": str(websocket.id),
+                "address": str(websocket.remote_address),
             },
         )
 
