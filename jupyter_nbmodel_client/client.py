@@ -10,6 +10,7 @@ import os
 from collections.abc import Coroutine
 from functools import partial
 from typing import Any, Callable, cast
+from urllib.parse import urlparse
 
 from pycrdt import (
     Awareness,
@@ -162,9 +163,21 @@ class NbModelClient(NotebookModel):
         return self._path
 
     @property
+    def server_url(self) -> str:
+        """Client server url."""
+        parsed_url = urlparse(self._ws_url)
+        cleaned_url = parsed_url._replace(query="", fragment="", params="")
+        return cleaned_url.geturl()
+
+    @property
     def synced(self) -> bool:
         """Whether the model is synced or not."""
         return self.__synced.is_set()
+
+    @property
+    def username(self) -> str:
+        """Client owner username."""
+        return self._username
 
     def __del__(self) -> None:
         if self.__run is not None:
