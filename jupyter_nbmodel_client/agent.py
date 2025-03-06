@@ -11,11 +11,11 @@ import os
 from datetime import datetime, timezone
 from enum import IntEnum
 from logging import Logger
-from typing import Any, Literal, cast
-from uuid import uuid4
+from typing import Any, Literal, TypedDict, cast
 
-from pycrdt import ArrayEvent, Map, MapEvent
+from pycrdt import ArrayEvent, Awareness, Map, MapEvent
 
+from ._version import VERSION
 from .client import REQUEST_TIMEOUT, NbModelClient
 
 
@@ -33,6 +33,25 @@ class AIMessageType(IntEnum):
     """Prompt is being processed."""
     REPLY = 1
     """AI reply."""
+
+
+class PeerChanges(TypedDict):
+    added: list[int]
+    """List of peer ids added."""
+    removed: list[int]
+    """List of peer ids removed."""
+    updated: list[int]
+    """List of peer ids updated."""
+
+
+class PeerEvent(TypedDict):
+    # Only trigger on change to avoid high callback pressure
+    # type: Literal["change", "update"]
+    # """Event type; "change" if the peer state changes, "update" if the peer state is updated even if unchanged."""
+    changes: PeerChanges
+    """Peer changes."""
+    origin: Literal["local"] | str
+    """Event origin; "local" if emitted by itself, the peer id otherwise."""
 
 
 # def _debug_print_changes(part: str, changes: Any) -> None:
@@ -62,6 +81,7 @@ class BaseNbAgent(NbModelClient):
             Callback on user prompt, it may return an AI reply and must raise an error in case of failure
         - method:`async _on_cell_source_changes(self, cell_id: str, new_source: str, old_source: str, username: str | None = None) -> None`:
             Callback on cell source changes, it must raise an error in case of failure
+      - Agents can sent transient messages to users through the method:`async notify(self, message: str, cell_id: str = "", message_type: AIMessageType = AIMessageType.ACKNOWLEDGE) -> None`
 
     Args:
         ws_url: Endpoint to connect to the collaborative Jupyter notebook.
@@ -85,7 +105,9 @@ class BaseNbAgent(NbModelClient):
     >>> )
     """
 
-    # FIXME implement username retrieval
+    user_agent: str = f"Datalayer-BaseNbAgent/{VERSION}"
+    """User agent used to identify the client type in the awareness state."""
+
     def __init__(
         self,
         websocket_url: str,
@@ -96,24 +118,41 @@ class BaseNbAgent(NbModelClient):
     ) -> None:
         super().__init__(websocket_url, path, username, timeout, log)
         self._doc_events: asyncio.Queue[dict] = asyncio.Queue()
+        self._peer_events: asyncio.Queue[PeerEvent] = asyncio.Queue()
 
     async def run(self) -> None:
         self._doc.observe(self._on_notebook_changes)
-        events_worker: asyncio.Task | None = None
+        awareness_callback = cast(Awareness, self._doc.awareness).observe(self._on_peer_changes)
+        doc_events_worker: asyncio.Task | None = None
+        peer_events_worker: asyncio.Task | None = None
         try:
-            events_worker = asyncio.create_task(self._process_doc_events())
+            doc_events_worker = asyncio.create_task(self._process_doc_events())
+            peer_events_worker = asyncio.create_task(self._process_peer_events())
             await super().run()
         finally:
             self._log.info("Stop the agent.")
-            if events_worker and not events_worker.done():
+            cast(Awareness, self._doc.awareness).unobserve(awareness_callback)
+            if doc_events_worker and not doc_events_worker.done():
                 if not self._doc_events.empty():
                     await self._doc_events.join()
-                if events_worker.cancel():
-                    await asyncio.wait([events_worker])
+                if doc_events_worker.cancel():
+                    await asyncio.wait([doc_events_worker])
             else:
                 try:
                     while True:
                         self._doc_events.get_nowait()
+                except asyncio.QueueEmpty:
+                    ...
+
+            if peer_events_worker and not peer_events_worker.done():
+                if not self._peer_events.empty():
+                    await self._peer_events.join()
+                if peer_events_worker.cancel():
+                    await asyncio.wait([peer_events_worker])
+            else:
+                try:
+                    while True:
+                        self._peer_events.get_nowait()
                 except asyncio.QueueEmpty:
                     ...
 
@@ -126,10 +165,9 @@ class BaseNbAgent(NbModelClient):
     ) -> None:
         self._log.info("Process user [%s] cell [%s] source changes.", username, cell_id)
 
-        # Acknowledge through awareness
+        # # Acknowledge through awareness
         # await self.notify(
-        #     AIMessageType.ACKNOWLEDGE,
-        #     "AI has successfully processed the prompt.",
+        #     "Analyzing source changes…",
         #     cell_id=cell_id,
         # )
         try:
@@ -137,16 +175,13 @@ class BaseNbAgent(NbModelClient):
         except asyncio.CancelledError:
             raise
         except BaseException as e:
-            error_message = f"Error while processing user prompt: {e!s}"
+            error_message = f"Error while analyzing cell source: {e!s}"
             self._log.error(error_message)
-            # await self.notify(
-            #     AIMessageType.ERROR, error_message, cell_id=cell_id
-            # )
+            # await self.notify(error_message, cell_id=cell_id, message_type=AIMessageType.ERROR)
         else:
             self._log.info("AI processed successfully cell [%s] source changes.", cell_id)
             # await self.notify(
-            #     AIMessageType.ACKNOWLEDGE,
-            #     "AI has successfully processed the prompt.",
+            #     "Source changes analyzed.",
             #     cell_id=cell_id,
             # )
 
@@ -176,6 +211,12 @@ class BaseNbAgent(NbModelClient):
         try:
             reply = await self._on_user_prompt(cell_id, prompt_id, prompt, username, timestamp)
         except asyncio.CancelledError:
+            await self.save_ai_message(
+                AIMessageType.ERROR,
+                "Prompt request cancelled.",
+                cell_id=cell_id,
+                parent_id=prompt_id,
+            )
             raise
         except BaseException as e:
             error_message = "Error while processing user prompt"
@@ -409,6 +450,31 @@ class BaseNbAgent(NbModelClient):
     # async def _on_cell_outputs_changes(self, *args) -> None:
     #     print(args)
 
+    async def _process_peer_events(self) -> None:
+        while True:
+            try:
+                event = await self._peer_events.get()
+                await self._on_peer_event(event)
+            except asyncio.CancelledError:
+                raise
+            except BaseException as e:
+                self._log.error("Error while processing peer events: %s", exc_info=e)
+            else:
+                # Sleep to get a chance to propagate changes through the websocket
+                await asyncio.sleep(0)
+
+    def _on_peer_changes(self, event_type: str, changes: tuple[dict, Any]) -> None:
+        if event_type != "udpate":
+            self._peer_events.put_nowait(
+                cast(PeerEvent, {"changes": changes[0], "origin": changes[1]})
+            )
+
+    async def _on_peer_event(self, event: PeerEvent) -> None:
+        """Callback on peer awareness events."""
+        self._log.debug(
+            "New event from peer [%s]: %s - %s", event["origin"], event["changes"]
+        )
+
     def get_cell(self, cell_id: str) -> Map | None:
         """Find the cell with the given ID.
 
@@ -503,12 +569,26 @@ class BaseNbAgent(NbModelClient):
         # Sleep to get a chance to propagate the changes through the websocket
         await asyncio.sleep(0)
 
-    # async def notify(self, message: str, cell_id: str = "") -> None:
-    #     """Send a transient message to users.
+    async def notify(
+        self,
+        message: str,
+        cell_id: str = "",
+        message_type: AIMessageType = AIMessageType.ACKNOWLEDGE,
+    ) -> None:
+        """Send a transient message to users.
 
-    #     Args:
-    #         message: Notification message
-    #         cell_id: Cell targeted by the notification; if empty the notebook is the target
-    #     """
-    #     # Sleep to get a chance to propagate the changes through the websocket
-    #     await asyncio.sleep(0)
+        Args:
+            message: Notification message
+            cell_id: Cell targeted by the notification; if empty the notebook is the target
+        """
+        self.set_local_state_field(
+            "notification",
+            {
+                "message": message,
+                "message_type": message_type,
+                "timestamp": timestamp(),
+                "cell_id": cell_id,
+            },
+        )
+        # Sleep to get a chance to propagate the changes through the websocket
+        await asyncio.sleep(0)

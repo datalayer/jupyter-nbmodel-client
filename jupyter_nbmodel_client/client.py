@@ -9,18 +9,21 @@ import logging
 import os
 from collections.abc import Coroutine
 from functools import partial
-from typing import Callable
+from typing import Any, Callable, cast
 
 from pycrdt import (
+    Awareness,
     TransactionEvent,
     YMessageType,
     YSyncMessageType,
+    create_awareness_message,
     create_sync_message,
     create_update_message,
     handle_sync_message,
 )
 from websockets.asyncio.client import ClientConnection, connect
 
+from ._version import VERSION
 from .constants import DEFAULT_LOGGER, REQUEST_TIMEOUT
 from .model import NotebookModel
 
@@ -37,10 +40,28 @@ def _on_doc_update(
     queue.put_nowait(message)
 
 
-async def _forward_update(
+def _on_awareness_event(
+    awareness: Awareness,
+    queue: asyncio.Queue,
+    event_type: str,
+    changes: tuple[dict[str, Any], Any],
+) -> None:
+    # Skip non-update awareness changes and non-local changes;
+    # aka broadcast only local update
+    if event_type != "update" or changes[1] != "local":
+        return
+
+    updated_clients = [v for value in changes[0].values() for v in value]
+    state = awareness.encode_awareness_update(updated_clients)
+    message = create_awareness_message(state)
+
+    queue.put_nowait(message)
+
+
+async def _send_messages(
     websocket: ClientConnection,
     logger: logging.Logger,
-    queue: asyncio.Queue,
+    queue: asyncio.Queue[bytes],
 ) -> None:
     while True:
         try:
@@ -50,7 +71,7 @@ async def _forward_update(
         except asyncio.CancelledError:
             raise
         except BaseException as e:
-            logger.error("Failed to forward update.", exc_info=e)
+            logger.error("Failed to forward message.", exc_info=e)
             raise
 
 
@@ -111,6 +132,9 @@ class NbModelClient(NotebookModel):
     # When using the client as a context manager or the start/stop methods, the `run` method will be
     # executed in a task.
 
+    user_agent: str = f"Datalayer-NbModelClient/{VERSION}"
+    """User agent used to identify the client type in the awareness state."""
+
     def __init__(
         self,
         websocket_url: str,
@@ -144,7 +168,7 @@ class NbModelClient(NotebookModel):
 
     def __del__(self) -> None:
         if self.__run is not None:
-            self.__run.cancel() # Theoritically, this should be awaited
+            self.__run.cancel()  # Theoritically, this should be awaited
 
     async def __aenter__(self) -> "NbModelClient":
         await self.start()
@@ -167,7 +191,7 @@ class NbModelClient(NotebookModel):
             logger=self._log,
             max_size=self._ws_max_body_size,
         )
-        updates_queue: asyncio.Queue[bytes] = asyncio.Queue()
+        messages_queue: asyncio.Queue[bytes] = asyncio.Queue()
 
         # Start listening to incoming message
         listener = asyncio.create_task(
@@ -178,10 +202,30 @@ class NbModelClient(NotebookModel):
             )
         )
 
-        # Start listening for model changes
-        doc_update_subscription = self._doc.ydoc.observe(partial(_on_doc_update, updates_queue))
-        forwarder = asyncio.create_task(
-            _forward_update(logger=self._log, websocket=websocket, queue=updates_queue)
+        # Start listening for doc changes
+        doc_observer = self._doc.ydoc.observe(partial(_on_doc_update, messages_queue))
+
+        # Start listening for awareness updates
+        awareness_observer = cast(Awareness, self._doc.awareness).observe(
+            partial(_on_awareness_event, cast(Awareness, self._doc.awareness), messages_queue)
+        )
+
+        # Set local state
+        self.set_local_state_field(
+            "user",
+            {
+                "agent": self.user_agent,
+                "owner": self._username,
+                "address": str(websocket.remote_address),
+            },
+        )
+
+        # Start the awareness regular ping
+        awareness_ping = asyncio.create_task(self._doc.awareness._start())
+
+        # Start forwarding document and awareness messages through the websocket
+        sender = asyncio.create_task(
+            _send_messages(logger=self._log, websocket=websocket, queue=messages_queue)
         )
 
         # Synchronize the model
@@ -195,7 +239,7 @@ class NbModelClient(NotebookModel):
 
         try:
             # Wait forever and prevent the forwarder to be cancelled to avoid losing changes
-            await asyncio.gather(listener, asyncio.shield(forwarder))
+            await asyncio.gather(awareness_ping, listener, asyncio.shield(sender))
         finally:
             self._log.info("Stop the client…")
 
@@ -203,23 +247,26 @@ class NbModelClient(NotebookModel):
             if listener.cancel():
                 await asyncio.wait([listener])
 
-            # Stop listening for model changes
+            # Stop listening for awareness updates
+            cast(Awareness, self._doc.awareness).unobserve(awareness_observer)
+
+            # Stop listening for document changes
             try:
-                self._doc.ydoc.unobserve(doc_update_subscription)
+                self._doc.ydoc.unobserve(doc_observer)
             except ValueError as e:
                 if str(e) != "list.remove(x): x not in list":
                     self._log.error("Failed to unobserve the notebook model.", exc_info=e)
 
             # Try to propagate the last changes
-            if not forwarder.done():
-                if not updates_queue.empty():
-                    self._log.debug("Propagating the %s last changes…", updates_queue.qsize())
-                    await asyncio.shield(updates_queue.join())
+            if not sender.done():
+                if not messages_queue.empty():
+                    self._log.debug("Propagating the %s last changes…", messages_queue.qsize())
+                    await asyncio.shield(messages_queue.join())
 
                 # Stop forwarding changes
-                if forwarder.cancel():
+                if sender.cancel():
                     self._log.debug("Stop forwarding changes…")
-                    await asyncio.wait([forwarder])
+                    await asyncio.wait([sender])
 
             # Reset the model
             self._reset_y_model()
@@ -237,6 +284,46 @@ class NbModelClient(NotebookModel):
                     websocket = None
 
             self.__is_running = False
+
+    def get_local_client_id(self) -> int:
+        """Get the local client ID.
+
+        This is the identifier of the client communicated to all peers.
+
+        Returns:
+            The local client ID.
+        """
+        return cast(Awareness, self._doc.awareness).client_id
+
+    def get_connected_peers(self) -> list[int]:
+        """Get the connected peer client IDs.
+
+        Returns:
+            A list of the connected peer client IDs.
+        """
+        local_id = self.get_local_client_id()
+        return [
+            client_id
+            for client_id in cast(Awareness, self._doc.awareness).states
+            if client_id != local_id
+        ]
+
+    def get_peer_state(self, client_id: int) -> dict[str, Any] | None:
+        """Get the connected peer client states.
+
+        Returns:
+            A dictionary of the connected peer client states.
+        """
+        return cast(Awareness, self._doc.awareness).states.get(client_id)
+
+    def set_local_state_field(self, key: str, value: Any) -> None:
+        """Sets a local state field to be shared between peer clients.
+
+        Args:
+            field: The field of the local state to set.
+            value: The value associated with the field.
+        """
+        cast(Awareness, self._doc.awareness).set_local_state_field(key, value)
 
     async def start(self) -> None:
         """Start the client."""
