@@ -472,7 +472,7 @@ class BaseNbAgent(NbModelClient):
     async def _on_peer_event(self, event: PeerEvent) -> None:
         """Callback on peer awareness events."""
         self._log.debug(
-            "New event from peer [%s]: %s - %s", event["origin"], event["changes"]
+            "New event from peer [%s]: %s", event["origin"], event["changes"]
         )
 
     def get_cell(self, cell_id: str) -> Map | None:
