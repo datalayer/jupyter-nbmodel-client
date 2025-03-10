@@ -8,6 +8,22 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## 0.11.1
+
+([Full Changelog](https://github.com/datalayer/jupyter-nbmodel-client/compare/v0.11.0...4b1694365a6ba3fe40f7661c11dd60d9a13e4f4a))
+
+### Bugs fixed
+
+- Fix default \_on_peer_event [#33](https://github.com/datalayer/jupyter-nbmodel-client/pull/33) ([@fcollonval](https://github.com/fcollonval))
+
+### Contributors to this release
+
+([GitHub contributors page for this release](https://github.com/datalayer/jupyter-nbmodel-client/graphs/contributors?from=2025-03-06&to=2025-03-10&type=c))
+
+[@fcollonval](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Afcollonval+updated%3A2025-03-06..2025-03-10&type=Issues)
+
+<!-- <END NEW CHANGELOG ENTRY> -->
+
 ## 0.11.0
 
 ([Full Changelog](https://github.com/datalayer/jupyter-nbmodel-client/compare/v0.10.0...09b91fca7b1923784074478be28ad1602dd43e74))
@@ -21,8 +37,6 @@
 ([GitHub contributors page for this release](https://github.com/datalayer/jupyter-nbmodel-client/graphs/contributors?from=2025-03-06&to=2025-03-06&type=c))
 
 [@fcollonval](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Afcollonval+updated%3A2025-03-06..2025-03-06&type=Issues)
-
-<!-- <END NEW CHANGELOG ENTRY> -->
 
 ## 0.10.0
 
