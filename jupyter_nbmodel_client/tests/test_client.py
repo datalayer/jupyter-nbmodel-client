@@ -97,6 +97,5 @@ async def test_set_cell_source(jupyter_server, notebook_factory):
     ) as notebook:
         index = notebook.add_code_cell("print('hello')")
         cell_source = notebook._doc._ycells[index]["source"]
-        print(cell_source)
         notebook.set_cell_source(index, "1 + 1 != 3")
         assert cell_source.to_py() == "1 + 1 != 3"
