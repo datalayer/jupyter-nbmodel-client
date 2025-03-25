@@ -8,6 +8,22 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## 0.11.2
+
+([Full Changelog](https://github.com/datalayer/jupyter-nbmodel-client/compare/v0.11.1...706d13dc7168d319ce717afaaa9e7ac824bae0b3))
+
+### Merged PRs
+
+- fix: set cell source [#35](https://github.com/datalayer/jupyter-nbmodel-client/pull/35) ([@echarles](https://github.com/echarles))
+
+### Contributors to this release
+
+([GitHub contributors page for this release](https://github.com/datalayer/jupyter-nbmodel-client/graphs/contributors?from=2025-03-10&to=2025-03-25&type=c))
+
+[@echarles](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Aecharles+updated%3A2025-03-10..2025-03-25&type=Issues)
+
+<!-- <END NEW CHANGELOG ENTRY> -->
+
 ## 0.11.1
 
 ([Full Changelog](https://github.com/datalayer/jupyter-nbmodel-client/compare/v0.11.0...4b1694365a6ba3fe40f7661c11dd60d9a13e4f4a))
@@ -21,8 +37,6 @@
 ([GitHub contributors page for this release](https://github.com/datalayer/jupyter-nbmodel-client/graphs/contributors?from=2025-03-06&to=2025-03-10&type=c))
 
 [@fcollonval](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Afcollonval+updated%3A2025-03-06..2025-03-10&type=Issues)
-
-<!-- <END NEW CHANGELOG ENTRY> -->
 
 ## 0.11.0
 
