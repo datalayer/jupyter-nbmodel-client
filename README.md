@@ -21,6 +21,13 @@ To install the library, run the following command.
 pip install jupyter_nbmodel_client
 ```
 
+We ask you to take additional actions to overcome limitations and bugs of the pycrdt library. Ensure you create a new shell after running the following commands.
+
+```bash
+pip uninstall -y pycrdt datalayer_pycrdt
+pip install datalayer_pycrdt
+```
+
 ## Usage
 
 1. Ensure you have the needed packages in your environment to run the example here after.

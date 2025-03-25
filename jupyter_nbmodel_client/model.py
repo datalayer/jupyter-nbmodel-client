@@ -418,8 +418,9 @@ class NotebookModel(MutableSequence):
         """
         with self._lock:
             with self._doc._ydoc.transaction(origin=self._changes_origin):
-                # TODO check it works - if as metadata, it does not.
-                t.cast(pycrdt.Map, self._doc._ycells[index])["source"] = source
+                text = t.cast(pycrdt.Map, self._doc._ycells[index])["source"]
+                text.clear()
+                text.insert(0, source)
 
     def set_notebook_metadata(self, key: str, value: t.Any) -> None:
         """Set a notebook metadata.
