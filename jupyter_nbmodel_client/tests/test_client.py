@@ -85,3 +85,17 @@ async def test_create_notebook_no_context_manager(jupyter_server, notebook_facto
         "nbformat": 4,
         "nbformat_minor": 5,
     }
+
+async def test_set_cell_source(jupyter_server, notebook_factory):
+    server_url, token = jupyter_server
+    path = "test.ipynb"
+
+    notebook_factory(path)
+
+    async with NbModelClient(
+        get_jupyter_notebook_websocket_url(server_url=server_url, path=path, token=token)
+    ) as notebook:
+        index = notebook.add_code_cell("print('hello')")
+        cell_source = notebook._doc._ycells[index]["source"]
+        notebook.set_cell_source(index, "1 + 1 != 3")
+        assert cell_source.to_py() == "1 + 1 != 3"
