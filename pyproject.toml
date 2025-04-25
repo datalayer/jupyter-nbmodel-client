@@ -20,9 +20,9 @@ classifiers = [
   "Framework :: Jupyter",
 ]
 dependencies = [
-  "jupyter_ydoc>=2.1.2,<4.0.0",
+  "jupyter_ydoc==3.0.4",
   "nbformat~=5.0",
-  "datalayer-pycrdt>=0.10.11",
+  "datalayer-pycrdt==0.12.15",
   "requests",
   "websockets>=14.0.0"
 ]
