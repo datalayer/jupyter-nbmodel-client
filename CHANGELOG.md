@@ -8,6 +8,23 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## 0.11.4
+
+([Full Changelog](https://github.com/datalayer/jupyter-nbmodel-client/compare/v0.11.2...0bb44364edaded1f22c85c36317244db2ebbdffa))
+
+### Merged PRs
+
+- fix package version [#37](https://github.com/datalayer/jupyter-nbmodel-client/pull/37) ([@eleonorecharles](https://github.com/eleonorecharles))
+- Bump apache/skywalking-eyes from 3ea9df11bb3a5a85665377d1fd10c02edecf2c40 to 477772b7ef382b9024ac89676ebe6cbb26165a4f in the actions group across 1 directory [#29](https://github.com/datalayer/jupyter-nbmodel-client/pull/29) ([@dependabot](https://github.com/dependabot))
+
+### Contributors to this release
+
+([GitHub contributors page for this release](https://github.com/datalayer/jupyter-nbmodel-client/graphs/contributors?from=2025-03-25&to=2025-04-25&type=c))
+
+[@dependabot](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Adependabot+updated%3A2025-03-25..2025-04-25&type=Issues) | [@eleonorecharles](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Aeleonorecharles+updated%3A2025-03-25..2025-04-25&type=Issues)
+
+<!-- <END NEW CHANGELOG ENTRY> -->
+
 ## 0.11.2
 
 ([Full Changelog](https://github.com/datalayer/jupyter-nbmodel-client/compare/v0.11.1...706d13dc7168d319ce717afaaa9e7ac824bae0b3))
@@ -21,8 +38,6 @@
 ([GitHub contributors page for this release](https://github.com/datalayer/jupyter-nbmodel-client/graphs/contributors?from=2025-03-10&to=2025-03-25&type=c))
 
 [@echarles](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Aecharles+updated%3A2025-03-10..2025-03-25&type=Issues)
-
-<!-- <END NEW CHANGELOG ENTRY> -->
 
 ## 0.11.1
 
