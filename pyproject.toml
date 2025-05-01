@@ -31,7 +31,7 @@ dependencies = [
 test = [
   "ipykernel",
   "jupyter-kernel-client",
-  "jupyter-server-ydoc>=1.0,<1.2",
+  "jupyter-server-ydoc>=1.0,<2.1",
   "pytest>=7.0",
   "pytest-asyncio",
   "pytest-timeout",
