@@ -28,6 +28,9 @@ build:
 clean: ## clean
 	git clean -fdx
 
+jupyterlab: ## jupyterlab
+	jupyter lab --port 8888 --ServerApp.port_retries 0 --IdentityProvider.token MY_TOKEN --ServerApp.root_dir ./dev
+
 publish-pypi: # publish the pypi package
 	git clean -fdx && \
 		python -m build

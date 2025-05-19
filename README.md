@@ -13,7 +13,7 @@
 [![Github Actions Status](https://github.com/datalayer/jupyter-nbmodel-client/workflows/Build/badge.svg)](https://github.com/datalayer/jupyter-nbmodel-client/actions/workflows/build.yml)
 [![PyPI - Version](https://img.shields.io/pypi/v/jupyter-nbmodel-client)](https://pypi.org/project/jupyter-nbmodel-client)
 
-Client to interact with a Jupyter Notebook model.
+`Jupyter NbModel Client` is a python client library to interact with a live Jupyter Notebook model.
 
 To install the library, run the following command.
 
@@ -21,9 +21,10 @@ To install the library, run the following command.
 pip install jupyter_nbmodel_client
 ```
 
-We ask you to take additional actions to overcome limitations and bugs of the pycrdt library. Ensure you create a new shell after running the following commands.
+We ask you to take additional actions to overcome limitations and bugs of the pycrdt library.
 
 ```bash
+# Ensure you create a new shell after running the following commands.
 pip uninstall -y pycrdt datalayer_pycrdt
 pip install datalayer_pycrdt
 ```
@@ -33,31 +34,31 @@ pip install datalayer_pycrdt
 1. Ensure you have the needed packages in your environment to run the example here after.
 
 ```sh
-pip install jupyterlab jupyter-collaboration ipykernel matplotlib
+pip install jupyterlab jupyter-collaboration matplotlib
 ```
 
 2. Start a JupyterLab server, setting a `port` and a `token` to be reused by the agent, and create a notebook `test.ipynb`.
 
 ```sh
-jupyter lab --port 8888 --IdentityProvider.token MY_TOKEN
+jupyter lab --port 8888 --ServerApp.port_retries 0 --IdentityProvider.token MY_TOKEN --ServerApp.root_dir ./dev
 ```
 
-3. Open a Python REPL and execute the following snippet to add a cell.
+3. Open a IPython REPL (needed for async functions) and execute the following snippet to add a cell in the `test.ipynb` notebook.
 
 ```py
 from jupyter_nbmodel_client import NbModelClient, get_jupyter_notebook_websocket_url
 
-with NbModelClient(
-    get_jupyter_notebook_websocket_url(
-        server_url="http://localhost:8888",
-        token="MY_TOKEN",
-        path="test.ipynb"
-    )
-) as notebook:
-    notebook.add_code_cell("print('hello world')")
+ws_url = get_jupyter_notebook_websocket_url(
+    server_url="http://localhost:8888",
+    token="MY_TOKEN",
+    path="test.ipynb"
+)
+
+async with NbModelClient(ws_url) as nbmodel:
+    nbmodel.add_code_cell("print('hello world')")
 ```
 
-> Check `test.ipynb` in JupyterLab.
+> Check `test.ipynb` in JupyterLab, you should see a cell being appended to the notebook.
 
 5. The previous example does not involve kernels. Put that now in the picture, adding a cell and executing within a kernel process.
 
@@ -66,16 +67,15 @@ from jupyter_kernel_client import KernelClient
 from jupyter_nbmodel_client import NbModelClient, get_jupyter_notebook_websocket_url
 
 with KernelClient(server_url="http://localhost:8888", token="MY_TOKEN") as kernel:
-    async with NbModelClient(
-        get_jupyter_notebook_websocket_url(
-            server_url="http://localhost:8888",
-            token="MY_TOKEN",
-            path="test.ipynb"
-        )
-    ) as notebook:
+    ws_url = get_jupyter_notebook_websocket_url(
+        server_url="http://localhost:8888",
+        token="MY_TOKEN",
+        path="test.ipynb"
+    )
+    async with NbModelClient(ws_url) as notebook:
         cell_index = notebook.add_code_cell("print('hello world')")
         results = notebook.execute_cell(cell_index, kernel)
-
+        print(results)
         assert results["status"] == "ok"
         assert len(results["outputs"]) > 0
 ```
@@ -107,16 +107,15 @@ plt.show()
 """
 
 with KernelClient(server_url="http://localhost:8888", token="MY_TOKEN") as kernel:
-    async with NbModelClient(
-        get_jupyter_notebook_websocket_url(
-            server_url="http://localhost:8888",
-            token="MY_TOKEN",
-            path="test.ipynb"
-        )
-    ) as notebook:
+    ws_url = get_jupyter_notebook_websocket_url(
+        server_url="http://localhost:8888",
+        token="MY_TOKEN",
+        path="test.ipynb"
+    )
+    async with NbModelClient(ws_url) as notebook:
         cell_index = notebook.add_code_cell(CODE)
         results = notebook.execute_cell(cell_index, kernel)
-
+        print(results)
         assert results["status"] == "ok"
         assert len(results["outputs"]) > 0
 ```
@@ -134,13 +133,12 @@ kernel = KernelClient(server_url="http://localhost:8888", token="MY_TOKEN")
 kernel.start()
 
 try:
-    notebook = NbModelClient(
-        get_jupyter_notebook_websocket_url(
-            server_url="http://localhost:8888",
-            token="MY_TOKEN",
-            path="test.ipynb"
-        )
+    ws_url = get_jupyter_notebook_websocket_url(
+        server_url="http://localhost:8888",
+        token="MY_TOKEN",
+        path="test.ipynb"
     )
+    notebook = NbModelClient(ws_url)
     await notebook.start()
     try:
         cell_index = notebook.add_code_cell("print('hello world')")
@@ -152,18 +150,19 @@ finally:
 ```
 
 > [!NOTE]
+>
 > To connect to Datalayer collaborative room, you can use the helper function `get_datalayer_websocket_url`:
 
 ```py
 from jupyter_nbmodel_client import NbModelClient, get_datalayer_websocket_url
 
-async with NbModelClient(
-    get_datalayer_websocket_url(
-        server_url=server,
-        room_id=room_id,
-        token=token
-    )
-) as notebook:
+ws_url = get_datalayer_websocket_url(
+    server_url=server,
+    room_id=room_id,
+    token=token
+)
+
+async with NbModelClient(ws_url) as notebook:
     notebook.add_code_cell(CODE)
 ```
 
@@ -175,12 +174,11 @@ To remove the library, run the following.
 pip uninstall jupyter_nbmodel_client
 ```
 
-## Contributing
+## Data Models
 
-### Data models
+The following json schema describe the data model used in cells and notebook metadata to communicate between user clients and an Jupyter AI Agent.
 
-The following json schema describe the data model used in cells and notebook metadata
-to communicate between user clients and the ai agent.
+For that, you will need the [Jupyter AI Agents](https://github.com/datalayer/jupyter-ai-agents) extension installed.
 
 ```json
 {
@@ -246,6 +244,8 @@ to communicate between user clients and the ai agent.
   }
 }
 ```
+
+## Contributing
 
 ### Development install
 

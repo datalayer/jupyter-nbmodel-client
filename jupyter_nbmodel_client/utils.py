@@ -8,7 +8,7 @@ import typing as t
 
 import requests
 
-from .constants import REQUEST_TIMEOUT
+from jupyter_nbmodel_client.constants import REQUEST_TIMEOUT
 
 
 def url_path_join(*pieces: str) -> str:

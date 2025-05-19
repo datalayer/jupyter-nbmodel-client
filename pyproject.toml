@@ -8,7 +8,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "jupyter_nbmodel_client"
-authors = [{ name = "Datalayer", email = "info@datalayer.io" }]
+authors = [
+  { name = "Datalayer", email = "info@datalayer.io" }
+]
 dynamic = ["version"]
 readme = "README.md"
 requires-python = ">=3.9"
@@ -21,22 +23,22 @@ classifiers = [
 ]
 dependencies = [
   "jupyter_ydoc==3.0.5",
-  "nbformat~=5.0",
-  "datalayer-pycrdt==0.12.15",
+  "nbformat>=5.10.4",
+  "datalayer-pycrdt==0.12.17",
   "requests",
-  "websockets>=14.0.0"
+  "websockets>=15.0.1",
 ]
 
 [project.optional-dependencies]
 test = [
   "ipykernel",
   "jupyter-kernel-client",
-  "jupyter-server-ydoc>=1.0,<1.2",
+  "jupyter-server-ydoc==2.0.2",
   "pytest>=7.0",
   "pytest-asyncio",
   "pytest-timeout",
   "pycrdt_websocket",
-  "hypercorn >=0.16.0",
+  "hypercorn>=0.16.0",
 ]
 lint = ["pre_commit", "mdformat>0.7", "mdformat-gfm>=0.3.5", "ruff"]
 typing = ["mypy>=0.990"]

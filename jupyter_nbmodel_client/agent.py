@@ -13,10 +13,10 @@ from enum import IntEnum
 from logging import Logger
 from typing import Any, Literal, TypedDict, cast
 
-from pycrdt import ArrayEvent, Awareness, Map, MapEvent
+from pycrdt import Awareness, Map
 
-from ._version import VERSION
-from .client import REQUEST_TIMEOUT, NbModelClient
+from jupyter_nbmodel_client._version import VERSION
+from jupyter_nbmodel_client.client import REQUEST_TIMEOUT, NbModelClient
 
 
 def timestamp() -> int:

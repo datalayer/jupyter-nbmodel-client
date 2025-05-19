@@ -7,8 +7,8 @@ from __future__ import annotations
 import logging
 from urllib.parse import quote, urlencode
 
-from .constants import DEFAULT_LOGGER, HTTP_PROTOCOL_REGEXP, REQUEST_TIMEOUT
-from .utils import fetch, url_path_join
+from jupyter_nbmodel_client.constants import DEFAULT_LOGGER, HTTP_PROTOCOL_REGEXP, REQUEST_TIMEOUT
+from jupyter_nbmodel_client.utils import fetch, url_path_join
 
 
 def get_jupyter_notebook_websocket_url(

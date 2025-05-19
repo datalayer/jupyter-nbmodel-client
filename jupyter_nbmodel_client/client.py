@@ -24,9 +24,9 @@ from pycrdt import (
 )
 from websockets.asyncio.client import ClientConnection, connect
 
-from ._version import VERSION
-from .constants import DEFAULT_LOGGER, REQUEST_TIMEOUT
-from .model import NotebookModel
+from jupyter_nbmodel_client._version import VERSION
+from jupyter_nbmodel_client.constants import DEFAULT_LOGGER, REQUEST_TIMEOUT
+from jupyter_nbmodel_client.model import NotebookModel
 
 # Default value taken from uvicorn: https://www.uvicorn.org/#command-line-options
 # Note: the default size for Tornado is 10MB not 16MB
@@ -109,13 +109,12 @@ class NbModelClient(NotebookModel):
     helper:
 
     >>> from jupyter_nbmodel_client import NbModelClient, get_jupyter_notebook_websocket_url
-    >>> client = NbModelClient(
-    >>>     get_jupyter_notebook_websocket_url(
-    >>>         "http://localhost:8888",
-    >>>         "path/to/notebook.ipynb",
-    >>>         "your-server-token"
-    >>>     )
+    >>> ws_url = get_jupyter_notebook_websocket_url(
+    >>>     "http://localhost:8888",
+    >>>     "path/to/notebook.ipynb",
+    >>>     "your-server-token"
     >>> )
+    >>> client = NbModelClient(ws_url)
     """
 
     # Code logic
