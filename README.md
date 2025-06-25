@@ -8,12 +8,12 @@
 
 [![Become a Sponsor](https://img.shields.io/static/v1?label=Become%20a%20Sponsor&message=%E2%9D%A4&logo=GitHub&style=flat&color=1ABC9C)](https://github.com/sponsors/datalayer)
 
-# Jupyter NbModel Client
+# 🪐 Jupyter NbModel Client
 
 [![Github Actions Status](https://github.com/datalayer/jupyter-nbmodel-client/workflows/Build/badge.svg)](https://github.com/datalayer/jupyter-nbmodel-client/actions/workflows/build.yml)
 [![PyPI - Version](https://img.shields.io/pypi/v/jupyter-nbmodel-client)](https://pypi.org/project/jupyter-nbmodel-client)
 
-`Jupyter NbModel Client` is a python client library to interact with a live Jupyter Notebook model.
+`Jupyter NbModel Client` is a python library to interact with a live Jupyter Notebooks.
 
 To install the library, run the following command.
 
@@ -40,10 +40,11 @@ pip install jupyterlab jupyter-collaboration matplotlib
 2. Start a JupyterLab server, setting a `port` and a `token` to be reused by the agent, and create a notebook `test.ipynb`.
 
 ```sh
+# make jupyterlab
 jupyter lab --port 8888 --ServerApp.port_retries 0 --IdentityProvider.token MY_TOKEN --ServerApp.root_dir ./dev
 ```
 
-3. Open a IPython REPL (needed for async functions) and execute the following snippet to add a cell in the `test.ipynb` notebook.
+3. Open a IPython (needed for async functions) REPL in a terminal with `ipython` (or `jupyter console`). Execute the following snippet to add a cell in the `test.ipynb` notebook.
 
 ```py
 from jupyter_nbmodel_client import NbModelClient, get_jupyter_notebook_websocket_url
@@ -58,9 +59,9 @@ async with NbModelClient(ws_url) as nbmodel:
     nbmodel.add_code_cell("print('hello world')")
 ```
 
-> Check `test.ipynb` in JupyterLab, you should see a cell being appended to the notebook.
+> Check `test.ipynb` in JupyterLab, you should see a cell with content `print('hello world')` appended to the notebook.
 
-5. The previous example does not involve kernels. Put that now in the picture, adding a cell and executing within a kernel process.
+5. The previous example does not involve kernels. Put that now in the picture, adding a cell and executing the cell code within a kernel process.
 
 ```py
 from jupyter_kernel_client import KernelClient
@@ -80,9 +81,9 @@ with KernelClient(server_url="http://localhost:8888", token="MY_TOKEN") as kerne
         assert len(results["outputs"]) > 0
 ```
 
-> Check `test.ipynb` in JupyterLab.
+> Check `test.ipynb` in JupyterLab. You should see an additional cell with content `print('hello world')` appended to the notebook, but this time the cell is executed, so the output should show `hello world`.
 
-You can go further and create a plot with Matplotlib.
+You can go further and create a plot with eg matplotlib.
 
 ```py
 from jupyter_kernel_client import KernelClient
@@ -120,7 +121,7 @@ with KernelClient(server_url="http://localhost:8888", token="MY_TOKEN") as kerne
         assert len(results["outputs"]) > 0
 ```
 
-> Check `test.ipynb` in JupyterLab.
+> Check `test.ipynb` in JupyterLab for the cell with the matplotlib.
 
 > [!NOTE]
 >
