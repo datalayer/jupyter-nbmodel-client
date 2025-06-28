@@ -11,6 +11,37 @@ from jupyter_nbmodel_client.constants import DEFAULT_LOGGER, HTTP_PROTOCOL_REGEX
 from jupyter_nbmodel_client.utils import fetch, url_path_join
 
 
+def get_notebook_websocket_url(
+    server_url: str,
+    path: str,
+    provider: "jupyter" | "datalayer" = "jupyter",
+    token: str | None = None,
+    timeout: float = REQUEST_TIMEOUT,
+    log: logging.Logger | None = None,
+) -> str:
+    """Get the websocket endpoint to connect to a collaborative Jupyter notebook.
+
+    Args:
+        server_url: Jupyter Server URL
+        provider: jupyter or datalayer
+        path: Notebook path relative to the server root directory
+        token: [optional] Jupyter Server authentication token; default None
+        timeout: [optional] Request timeout in seconds; default to environment variable REQUEST_TIMEOUT
+        log: [optional] Custom logger; default local logger
+
+    Returns:
+        The websocket endpoint
+    """
+    if provider == "jupyter":
+        return get_jupyter_notebook_websocket_url(
+            server_url, path, token, timeout, log
+        )
+    elif provider == "datalayer":
+        return get_datalayer_notebook_websocket_url(
+            server_url, path, token, timeout, log
+        )
+
+
 def get_jupyter_notebook_websocket_url(
     server_url: str,
     path: str,
@@ -31,7 +62,7 @@ def get_jupyter_notebook_websocket_url(
         The websocket endpoint
     """
     (log or DEFAULT_LOGGER).debug("Request the session ID from the Jupyter server.")
-    # Fetch a session ID
+    # Fetch a session ID.
     response = fetch(
         url_path_join(server_url, "/api/collaboration/session", quote(path)),
         token,
@@ -54,7 +85,7 @@ def get_jupyter_notebook_websocket_url(
     return room_url
 
 
-def get_datalayer_websocket_url(
+def get_datalayer_notebook_websocket_url(
     server_url: str,
     room_id: str,
     token: str | None = None,
