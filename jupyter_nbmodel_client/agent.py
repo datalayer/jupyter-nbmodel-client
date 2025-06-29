@@ -2,7 +2,7 @@
 #
 # BSD 3-Clause License
 
-"""This module provides a base class agent to interact with collaborative Jupyter notebook."""
+"""This module provides a base class AI agent to interact with collaborative Jupyter notebook."""
 
 from __future__ import annotations
 

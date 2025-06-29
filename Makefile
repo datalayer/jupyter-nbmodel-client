@@ -28,6 +28,9 @@ build:
 clean: ## clean
 	git clean -fdx
 
+jupyter-server: ## jupyter-server
+	jupyter server --port 8888 --ServerApp.port_retries 0 --IdentityProvider.token MY_TOKEN --ServerApp.root_dir ./dev
+
 jupyterlab: ## jupyterlab
 	jupyter lab --port 8888 --ServerApp.port_retries 0 --IdentityProvider.token MY_TOKEN --ServerApp.root_dir ./dev
 
