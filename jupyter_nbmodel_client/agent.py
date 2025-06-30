@@ -106,7 +106,7 @@ class BaseNbAgent(NbModelClient):
     """
 
     user_agent: str = f"Datalayer-BaseNbAgent/{VERSION}"
-    """User agent used to identify the client type in the awareness state."""
+    """User agent used to identify the nbmodel client type in the awareness state."""
 
     def __init__(
         self,

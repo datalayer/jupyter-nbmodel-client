@@ -125,7 +125,7 @@ with KernelClient(server_url="http://localhost:8888", token="MY_TOKEN") as kerne
 
 > [!NOTE]
 >
-> Instead of using the clients as context manager, you can call the `start()` and `stop()` methods.
+> Instead of using the nbmodel clients as context manager, you can call the `start()` and `stop()` methods.
 
 ```py
 from jupyter_nbmodel_client import NbModelClient, get_jupyter_notebook_websocket_url
