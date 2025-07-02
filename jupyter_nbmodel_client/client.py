@@ -129,11 +129,11 @@ class NbModelClient(NotebookModel):
     #
     # Document changes callback is only placing event in a queue as it is a blocking operation.
     #
-    # When using the client as a context manager or the start/stop methods, the `run` method will be
+    # When using the nbmodel client as a context manager or the start/stop methods, the `run` method will be
     # executed in a task.
 
     user_agent: str = f"Datalayer-NbModelClient/{VERSION}"
-    """User agent used to identify the client type in the awareness state."""
+    """User agent used to identify the nbmodel client type in the awareness state."""
 
     def __init__(
         self,
@@ -190,7 +190,8 @@ class NbModelClient(NotebookModel):
         await self.stop()
 
     async def run(self) -> None:
-        """Run the client."""
+        """Run the nbmodel client."""
+        self._log.info("Starting the nbmodel client…")
         if self.__is_running:
             raise RuntimeError("NbModelClient is already connected.")
 
@@ -253,7 +254,7 @@ class NbModelClient(NotebookModel):
             # Wait forever and prevent the forwarder to be cancelled to avoid losing changes
             await asyncio.gather(awareness_ping, listener, asyncio.shield(sender))
         finally:
-            self._log.info("Stop the client…")
+            self._log.info("Stopping the nbmodel client…")
 
             # Stop listening to incoming messages
             if listener.cancel():
@@ -300,7 +301,7 @@ class NbModelClient(NotebookModel):
     def get_local_client_id(self) -> int:
         """Get the local client ID.
 
-        This is the identifier of the client communicated to all peers.
+        This is the identifier of the nbmodel client communicated to all peers.
 
         Returns:
             The local client ID.
@@ -338,7 +339,7 @@ class NbModelClient(NotebookModel):
         cast(Awareness, self._doc.awareness).set_local_state_field(key, value)
 
     async def start(self) -> None:
-        """Start the client."""
+        """Start the nbmodel client."""
         if self.__run is not None:
             raise RuntimeError("The client is already connected.")
 
@@ -358,9 +359,15 @@ class NbModelClient(NotebookModel):
             self._log.warning("Document %s not yet synced.", self._path)
 
     async def stop(self) -> None:
-        """Stop and reset the client."""
-        if self.__run is not None and self.__run.cancel():
-            await asyncio.wait([self.__run])
+        """Stop and reset the nbmodel client."""
+        if self.__run is not None:
+            if self.__run.cancel():
+                # TODO without timeout, stop() sometimes hangs indefinitely.
+                # try:
+                #     await asyncio.wait_for(self.__run, timeout=1.0)
+                # except TimeoutError:
+                #     self._log.warning('Timeout with stopping the nbmodel client "%s".', self._path)
+                await asyncio.wait([self.__run])
 
     async def wait_until_synced(self) -> None:
         """Wait until the model is synced."""

@@ -29,7 +29,7 @@ pip uninstall -y pycrdt datalayer_pycrdt
 pip install datalayer_pycrdt
 ```
 
-## Usage
+## Usage with Jupyter
 
 1. Ensure you have the needed packages in your environment to run the example here after.
 
@@ -125,7 +125,7 @@ with KernelClient(server_url="http://localhost:8888", token="MY_TOKEN") as kerne
 
 > [!NOTE]
 >
-> Instead of using the clients as context manager, you can call the `start()` and `stop()` methods.
+> Instead of using the nbmodel clients as context manager, you can call the `start()` and `stop()` methods.
 
 ```py
 from jupyter_nbmodel_client import NbModelClient, get_jupyter_notebook_websocket_url
@@ -150,21 +150,27 @@ finally:
     kernel.stop()
 ```
 
-> [!NOTE]
->
-> To connect to Datalayer collaborative room, you can use the helper function `get_datalayer_websocket_url`:
+## Usage with Datalayer
+
+To connect to a [Datalayer collaborative room](https://docs.datalayer.app/platform#notebook-editor), you can use the helper function `get_datalayer_notebook_websocket_url`:
+
+- The `server` is `https://prod1.datalayer.run` for the Datalayer production SaaS.
+- The `room_id` is the id of your notebook shown in the URL browser bar.
+- The `token` is the assigned token for the notebook.
+
+All those details can be retrieved from a Notebook sidebar on the Datalayer SaaS.
 
 ```py
-from jupyter_nbmodel_client import NbModelClient, get_datalayer_websocket_url
+from jupyter_nbmodel_client import NbModelClient, get_datalayer_notebook_websocket_url
 
-ws_url = get_datalayer_websocket_url(
+ws_url = get_datalayer_notebook_websocket_url(
     server_url=server,
     room_id=room_id,
     token=token
 )
 
 async with NbModelClient(ws_url) as notebook:
-    notebook.add_code_cell(CODE)
+    notebook.add_code_cell("1+1")
 ```
 
 ## Uninstall
@@ -177,7 +183,7 @@ pip uninstall jupyter_nbmodel_client
 
 ## Data Models
 
-The following json schema describe the data model used in cells and notebook metadata to communicate between user clients and an Jupyter AI Agent.
+The following json schema describes the data model used in cells and notebook metadata to communicate between user clients and an Jupyter AI Agent.
 
 For that, you will need the [Jupyter AI Agents](https://github.com/datalayer/jupyter-ai-agents) extension installed.
 

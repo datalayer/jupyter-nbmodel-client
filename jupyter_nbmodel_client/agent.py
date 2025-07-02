@@ -2,7 +2,7 @@
 #
 # BSD 3-Clause License
 
-"""This module provides a base class agent to interact with collaborative Jupyter notebook."""
+"""This module provides a base class AI agent to interact with collaborative Jupyter notebook."""
 
 from __future__ import annotations
 
@@ -106,7 +106,7 @@ class BaseNbAgent(NbModelClient):
     """
 
     user_agent: str = f"Datalayer-BaseNbAgent/{VERSION}"
-    """User agent used to identify the client type in the awareness state."""
+    """User agent used to identify the nbmodel client type in the awareness state."""
 
     def __init__(
         self,
