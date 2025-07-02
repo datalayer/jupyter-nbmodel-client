@@ -361,13 +361,13 @@ class NbModelClient(NotebookModel):
     async def stop(self) -> None:
         """Stop and reset the nbmodel client."""
         if self.__run is not None:
-            # TODO without timeout, stop() sometimes hangs indefinitely.
-            # try:
-            #     await asyncio.wait_for(self.__run, timeout=1.0)
-            # except TimeoutError:
-            #     self._log.warning('Timeout with stopping the nbmodel client "%s".', self._path)
-            self.__run.cancel()
-            await asyncio.wait([self.__run])
+            if self.__run.cancel():
+                # TODO without timeout, stop() sometimes hangs indefinitely.
+                # try:
+                #     await asyncio.wait_for(self.__run, timeout=1.0)
+                # except TimeoutError:
+                #     self._log.warning('Timeout with stopping the nbmodel client "%s".', self._path)
+                await asyncio.wait([self.__run])
 
     async def wait_until_synced(self) -> None:
         """Wait until the model is synced."""
