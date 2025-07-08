@@ -135,6 +135,7 @@ class NbModelClient(NotebookModel):
     user_agent: str = f"Datalayer-NbModelClient/{VERSION}"
     """User agent used to identify the nbmodel client type in the awareness state."""
 
+
     def __init__(
         self,
         websocket_url: str,
@@ -155,6 +156,7 @@ class NbModelClient(NotebookModel):
         self.__synced = asyncio.Event()
         self.__run: asyncio.Task | None = None
         self.__is_running = False
+
 
     @property
     def path(self) -> str:
@@ -178,6 +180,7 @@ class NbModelClient(NotebookModel):
         """Client owner username."""
         return self._username
 
+
     def __del__(self) -> None:
         if self.__run is not None:
             self.__run.cancel()  # Theoritically, this should be awaited
@@ -188,6 +191,7 @@ class NbModelClient(NotebookModel):
 
     async def __aexit__(self, exc_type, exc_value, exc_tb) -> None:
         await self.stop()
+
 
     async def run(self) -> None:
         """Run the nbmodel client."""
@@ -256,14 +260,17 @@ class NbModelClient(NotebookModel):
         finally:
             self._log.info("Stopping the nbmodel client…")
 
-            # Stop listening to incoming messages
+            # Stop listening to incoming messages.
+            self._log.debug("Stopping listening to incoming messages…")
             if listener.cancel():
                 await asyncio.wait([listener])
 
             # Stop listening for awareness updates
+            self._log.debug("Stopping listening for awareness update…")
             cast(Awareness, self._doc.awareness).unobserve(awareness_observer)
 
             # Stop listening for document changes
+            self._log.debug("Stopping listening for document changes…")
             try:
                 self._doc.ydoc.unobserve(doc_observer)
             except ValueError as e:
@@ -271,21 +278,31 @@ class NbModelClient(NotebookModel):
                     self._log.error("Failed to unobserve the notebook model.", exc_info=e)
 
             # Try to propagate the last changes
+            self._log.debug("Trying to propagate the last changes…")
             if not sender.done():
+                # TODO This is not working as expected, the messages are not sent and hangs indefinitely.
+                # This is probably due to the fact that the sender task is not awaited.
+                # We should probably use a timeout here to avoid hanging indefinitely.
+                # If the sender is not done, we wait for the messages queue to be empty.
+                # If the messages queue is not empty, we wait for the sender to finish sending the messages.
+                # This is to ensure that all the changes are propagated before closing the websocket.
                 if not messages_queue.empty():
-                    self._log.debug("Propagating the %s last changes…", messages_queue.qsize())
-                    await asyncio.shield(messages_queue.join())
+                    self._log.warning("Propagation disabled for now - Propagating the %s last changes…", messages_queue.qsize())
+#                    await asyncio.shield(messages_queue.join())
 
                 # Stop forwarding changes
+                self._log.debug("Stopping forwarding changes…")
                 if sender.cancel():
-                    self._log.debug("Stop forwarding changes…")
+                    self._log.debug("Stopping forwarding changes…")
                     await asyncio.wait([sender])
 
             # Reset the model
+            self._log.debug("Resetting the model…")
             self._reset_y_model()
             self.__synced.clear()
 
             # Close the websocket
+            self._log.debug("Closing the websocket…")
             if websocket:
                 try:
                     await websocket.close()
@@ -293,10 +310,11 @@ class NbModelClient(NotebookModel):
                     self._log.error("Unable to close the websocket connection.", exc_info=e)
                     raise
                 finally:
-                    self._log.debug("Websocket connection closed.")
+                    self._log.info("Websocket connection closed.")
                     websocket = None
 
             self.__is_running = False
+
 
     def get_local_client_id(self) -> int:
         """Get the local client ID.
@@ -338,6 +356,7 @@ class NbModelClient(NotebookModel):
         """
         cast(Awareness, self._doc.awareness).set_local_state_field(key, value)
 
+
     async def start(self) -> None:
         """Start the nbmodel client."""
         if self.__run is not None:
@@ -358,20 +377,18 @@ class NbModelClient(NotebookModel):
         if not self.synced:
             self._log.warning("Document %s not yet synced.", self._path)
 
+
     async def stop(self) -> None:
         """Stop and reset the nbmodel client."""
         if self.__run is not None:
             if self.__run.cancel():
-                # TODO without timeout, stop() sometimes hangs indefinitely.
-                # try:
-                #     await asyncio.wait_for(self.__run, timeout=1.0)
-                # except TimeoutError:
-                #     self._log.warning('Timeout with stopping the nbmodel client "%s".', self._path)
                 await asyncio.wait([self.__run])
+
 
     async def wait_until_synced(self) -> None:
         """Wait until the model is synced."""
         await self.__synced.wait()
+
 
     async def _on_message(self, websocket: ClientConnection, message: bytes) -> None:
         if message[0] == YMessageType.SYNC:
