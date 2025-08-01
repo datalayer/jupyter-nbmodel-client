@@ -105,11 +105,11 @@ def get_datalayer_notebook_websocket_url(
     Returns:
         The websocket endpoint
     """
-    DATALAYER_ROOMS_ENDPOINT = "/api/spacer/v1/rooms"
+    DATALAYER_DOCUMENTS_ENDPOINT = "/api/spacer/v1/documents"
     (log or DEFAULT_LOGGER).debug("Request the session ID from the Datalayer server.")
     # Fetch a session ID
     response = fetch(
-        url_path_join(server_url, DATALAYER_ROOMS_ENDPOINT, room_id),
+        url_path_join(server_url, DATALAYER_DOCUMENTS_ENDPOINT, room_id),
         token,
         method="GET",
         timeout=timeout,
@@ -124,7 +124,7 @@ def get_datalayer_notebook_websocket_url(
         raise ValueError(emsg)
 
     base_ws_url = HTTP_PROTOCOL_REGEXP.sub("ws", server_url, 1)
-    room_url = url_path_join(base_ws_url, DATALAYER_ROOMS_ENDPOINT, room_id)
+    room_url = url_path_join(base_ws_url, DATALAYER_DOCUMENTS_ENDPOINT, room_id)
     params = {"sessionId": session_id}
     if token is not None:
         params["token"] = token
