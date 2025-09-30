@@ -69,6 +69,7 @@ async def _send_messages(
             message = await queue.get()
             logger.debug("Forwarding message [%s]", message)
             await websocket.send(message)
+            queue.task_done()
         except asyncio.CancelledError:
             raise
         except BaseException as e:
@@ -280,15 +281,17 @@ class NbModelClient(NotebookModel):
             # Try to propagate the last changes
             self._log.debug("Trying to propagate the last changes…")
             if not sender.done():
-                # TODO This is not working as expected, the messages are not sent and hangs indefinitely.
-                # This is probably due to the fact that the sender task is not awaited.
-                # We should probably use a timeout here to avoid hanging indefinitely.
-                # If the sender is not done, we wait for the messages queue to be empty.
-                # If the messages queue is not empty, we wait for the sender to finish sending the messages.
-                # This is to ensure that all the changes are propagated before closing the websocket.
                 if not messages_queue.empty():
-                    self._log.warning("Propagation disabled for now - Propagating the %s last changes…", messages_queue.qsize())
-#                    await asyncio.shield(messages_queue.join())
+                    # If the messages queue is not empty, attempt to propagate all messages 
+                    # before closing the websocket (with timeout so we don't hang indefinitely)
+                    self._log.debug("Propagating changes - %d messages in queue", messages_queue.qsize())
+                    try:
+                        await asyncio.wait_for(messages_queue.join(), timeout=10.0)
+                    except asyncio.TimeoutError:
+                        self._log.warning(
+                            "Timed out propagating %s pending changes; closing anyway",
+                            messages_queue.qsize()
+                        )
 
                 # Stop forwarding changes
                 self._log.debug("Stopping forwarding changes…")
