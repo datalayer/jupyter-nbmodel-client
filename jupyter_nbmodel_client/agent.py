@@ -89,6 +89,8 @@ class BaseNbAgent(NbModelClient):
         username: [optional] Client user name; default to environment variable USER
         timeout: [optional] Request timeout in seconds; default to environment variable REQUEST_TIMEOUT
         log: [optional] Custom logger; default local logger
+        ws_max_body_size: [optional] Maximum WebSocket body size in bytes; default 16MB
+        close_timeout: [optional] Timeout for propagating final changes on close; default to timeout value
 
     Examples:
 
@@ -115,8 +117,10 @@ class BaseNbAgent(NbModelClient):
         username: str = os.environ.get("USER", "username"),
         timeout: float = REQUEST_TIMEOUT,
         log: Logger | None = None,
+        ws_max_body_size: int | None = None,
+        close_timeout: float | None = None,
     ) -> None:
-        super().__init__(websocket_url, path, username, timeout, log)
+        super().__init__(websocket_url, path, username, timeout, log, ws_max_body_size, close_timeout)
         self._doc_events: asyncio.Queue[dict] = asyncio.Queue()
         self._peer_events: asyncio.Queue[PeerEvent] = asyncio.Queue()
 

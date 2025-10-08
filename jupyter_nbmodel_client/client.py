@@ -65,14 +65,26 @@ async def _send_messages(
     queue: asyncio.Queue[bytes],
 ) -> None:
     while True:
+        message = None
         try:
             message = await queue.get()
             logger.debug("Forwarding message [%s]", message)
             await websocket.send(message)
+            queue.task_done()  # Mark task as done for queue.join()
         except asyncio.CancelledError:
+            # Only call task_done if we actually got a message from the queue
+            if message is not None:
+                queue.task_done()
             raise
         except BaseException as e:
-            logger.error("Failed to forward message.", exc_info=e)
+            logger.error(
+                "Failed to forward message to websocket. Queue size: %s",
+                queue.qsize(),
+                exc_info=e,
+            )
+            # Only call task_done if we actually got a message from the queue
+            if message is not None:
+                queue.task_done()
             raise
 
 
@@ -102,6 +114,8 @@ class NbModelClient(NotebookModel):
         username: [optional] Client user name; default to environment variable USER
         timeout: [optional] Request timeout in seconds; default to environment variable REQUEST_TIMEOUT
         log: [optional] Custom logger; default local logger
+        ws_max_body_size: [optional] Maximum WebSocket body size in bytes; default 16MB
+        close_timeout: [optional] Timeout for propagating final changes on close; default to timeout value
 
     Examples:
 
@@ -144,6 +158,7 @@ class NbModelClient(NotebookModel):
         timeout: float = REQUEST_TIMEOUT,
         log: logging.Logger | None = None,
         ws_max_body_size: int | None = None,
+        close_timeout: float | None = None,
     ) -> None:
         super().__init__()
         self._ws_url = websocket_url
@@ -152,6 +167,7 @@ class NbModelClient(NotebookModel):
         self._timeout = timeout
         self._log = log or DEFAULT_LOGGER
         self._ws_max_body_size = ws_max_body_size or WEBSOCKETS_MAX_BODY_SIZE
+        self._close_timeout = close_timeout if close_timeout is not None else timeout
 
         self.__synced = asyncio.Event()
         self.__run: asyncio.Task | None = None
@@ -260,16 +276,15 @@ class NbModelClient(NotebookModel):
         finally:
             self._log.info("Stopping the nbmodel client…")
 
-            # Stop listening to incoming messages.
+            # Step 1: Stop listening to incoming messages (prevent new messages from server)
             self._log.debug("Stopping listening to incoming messages…")
             if listener.cancel():
                 await asyncio.wait([listener])
 
-            # Stop listening for awareness updates
+            # Step 2: Stop document and awareness observers (prevent new local changes)
             self._log.debug("Stopping listening for awareness update…")
             cast(Awareness, self._doc.awareness).unobserve(awareness_observer)
 
-            # Stop listening for document changes
             self._log.debug("Stopping listening for document changes…")
             try:
                 self._doc.ydoc.unobserve(doc_observer)
@@ -277,31 +292,41 @@ class NbModelClient(NotebookModel):
                 if str(e) != "list.remove(x): x not in list":
                     self._log.error("Failed to unobserve the notebook model.", exc_info=e)
 
-            # Try to propagate the last changes
+            # Step 3: Wait for message queue to be empty (with timeout protection)
             self._log.debug("Trying to propagate the last changes…")
             if not sender.done():
-                # TODO This is not working as expected, the messages are not sent and hangs indefinitely.
-                # This is probably due to the fact that the sender task is not awaited.
-                # We should probably use a timeout here to avoid hanging indefinitely.
-                # If the sender is not done, we wait for the messages queue to be empty.
-                # If the messages queue is not empty, we wait for the sender to finish sending the messages.
-                # This is to ensure that all the changes are propagated before closing the websocket.
                 if not messages_queue.empty():
-                    self._log.warning("Propagation disabled for now - Propagating the %s last changes…", messages_queue.qsize())
-#                    await asyncio.shield(messages_queue.join())
+                    self._log.info("Propagating %s last changes…", messages_queue.qsize())
+                    try:
+                        # Use timeout to avoid hanging indefinitely
+                        await asyncio.wait_for(
+                            asyncio.shield(messages_queue.join()),
+                            timeout=self._close_timeout,
+                        )
+                        self._log.info("All changes propagated successfully.")
+                    except asyncio.TimeoutError:
+                        self._log.warning(
+                            "Timeout while propagating last %s changes. Some changes may be lost.",
+                            messages_queue.qsize(),
+                        )
 
-                # Stop forwarding changes
-                self._log.debug("Stopping forwarding changes…")
+                # Step 4: Stop the sender task (now that queue is empty or timed out)
+                self._log.debug("Stopping forwarding task…")
                 if sender.cancel():
-                    self._log.debug("Stopping forwarding changes…")
                     await asyncio.wait([sender])
 
-            # Reset the model
+            # Step 5: Stop awareness ping
+            if not awareness_ping.done():
+                self._log.debug("Stopping awareness ping…")
+                awareness_ping.cancel()
+                await asyncio.wait([awareness_ping])
+
+            # Step 6: Reset the model
             self._log.debug("Resetting the model…")
             self._reset_y_model()
             self.__synced.clear()
 
-            # Close the websocket
+            # Step 7: Close the websocket (last step to ensure all messages are sent)
             self._log.debug("Closing the websocket…")
             if websocket:
                 try:

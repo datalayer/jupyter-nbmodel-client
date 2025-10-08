@@ -99,3 +99,36 @@ async def test_set_cell_source(jupyter_server, notebook_factory):
         cell_source = notebook._doc._ycells[index]["source"]
         notebook.set_cell_source(index, "1 + 1 != 3")
         assert cell_source.to_py() == "1 + 1 != 3"
+
+
+async def test_save_on_disconnect(jupyter_server, notebook_factory):
+    """Test that changes are saved when disconnecting quickly.
+    
+    This test verifies the fix for the issue where rapid disconnection
+    could cause unsaved changes to be lost from the message queue.
+    """
+    server_url, token = jupyter_server
+    path = "test_disconnect.ipynb"
+
+    notebook_factory(path)
+
+    # Connect and make multiple rapid changes
+    async with NbModelClient(
+        get_jupyter_notebook_websocket_url(server_url=server_url, path=path, token=token)
+    ) as notebook:
+        # Quickly add multiple cells
+        for i in range(10):
+            notebook.add_code_cell(f"print({i})")
+        # Exit context immediately (triggers close)
+
+    # Reconnect and verify all changes were saved
+    async with NbModelClient(
+        get_jupyter_notebook_websocket_url(server_url=server_url, path=path, token=token)
+    ) as notebook2:
+        # Should have original empty cell + 10 new cells = 11 total
+        assert len(notebook2) == 11
+        # Verify content of the cells
+        for i in range(10):
+            cell = notebook2[i + 1]  # Skip first empty cell
+            assert cell["source"] == f"print({i})"
+            assert cell["cell_type"] == "code"
