@@ -11,6 +11,7 @@ from collections.abc import MutableSequence
 from copy import deepcopy
 from functools import partial
 from uuid import uuid4
+from typing import Literal
 
 import pycrdt
 from jupyter_ydoc import YNotebook
@@ -190,6 +191,70 @@ class NotebookModel(MutableSequence):
                 metadata.clear()
                 metadata.update(value)
 
+    def insert_cell(
+        self, 
+        index: int, 
+        source: str,
+        cell_type: Literal["code", "markdown", "raw"],
+        **kwargs
+    ) -> None:
+        """Insert a cell at the specified position
+        
+        This is a unified insertion interface that automatically creates the appropriate type of cell based on the cell_type parameter.
+        
+        Args:
+            index: Insertion position index (0-based), using -1 to insert at the end
+            source: Cell source code or text content
+            cell_type: Cell type, options: "code" (code), "markdown" (Markdown), "raw" (raw text)
+            **kwargs: Additional parameters passed to cell creation function (e.g., metadata)
+            
+        Raises:
+            IndexError: When index is outside valid range [-1, len(notebook)]
+            ValueError: When cell_type is not a valid value
+            
+        Examples:
+            >>> # Insert code cell
+            >>> notebook.insert_cell(0, "import pandas as pd", cell_type="code")
+            
+            >>> # Insert Markdown cell
+            >>> notebook.insert_cell(1, "# Data Analysis", cell_type="markdown")
+            
+            >>> # Insert raw cell
+            >>> notebook.insert_cell(2, "Raw text", cell_type="raw")
+            
+            >>> # With metadata
+            >>> notebook.insert_cell(
+            ...     3, 
+            ...     "print('hello')", 
+            ...     cell_type="code",
+            ...     metadata={"tags": ["important"]}
+            ... )
+            
+            >>> # Dynamic type
+            >>> for cell_type, content in cells_to_add:
+            ...     notebook.insert_cell(index, content, cell_type=cell_type)
+            ...     index += 1
+        """
+        if index < -1 or index > len(self):
+            raise IndexError(f"Index {index} is outside valid range [-1, {len(self)}]")
+        if cell_type not in ["code", "markdown", "raw"]:
+            raise ValueError(f"Invalid cell type: {cell_type}")
+        
+        if index == -1:
+            if cell_type == "code":
+                self.add_code_cell(source, **kwargs)
+            elif cell_type == "markdown":
+                self.add_markdown_cell(source, **kwargs)
+            elif cell_type == "raw":
+                self.add_raw_cell(source, **kwargs)
+        else:
+            if cell_type == "code":
+                self.insert_code_cell(index, source, **kwargs)
+            elif cell_type == "markdown":
+                self.insert_markdown_cell(index, source, **kwargs)
+            elif cell_type == "raw":
+                self.insert_raw_cell(index, source, **kwargs)
+    
     def add_code_cell(self, source: str, **kwargs) -> int:
         """Add a code cell
 
@@ -391,6 +456,16 @@ class NotebookModel(MutableSequence):
         """
         cell = current_api.new_markdown_cell(source, **kwargs)
         self.insert(index, cell)
+    
+    def insert_raw_cell(self, index: int, source: str, **kwargs) -> None:
+        """Insert a raw cell at position index.
+
+        Args:
+            index: The position of the inserted cell
+            source: Raw cell source
+        """
+        cell = current_api.new_raw_cell(source, **kwargs)
+        self.insert(index, cell)
 
     def set_cell_metadata(self, index: int, key: str, value: t.Any) -> None:
         """Set a cell metadata.
@@ -435,6 +510,32 @@ class NotebookModel(MutableSequence):
                 if key in metadata:
                     del metadata[key]  # FIXME pycrdt only support inserting key
                 metadata[key] = value
+    
+    def delete_cell(self, index: int) -> NotebookNode:
+        """Delete a cell at the specified index and return its content
+        
+        Args:
+            index: Cell index (0-based)
+            
+        Returns:
+            The deleted cell content (NotebookNode object)
+            
+        Raises:
+            IndexError: When index is out of range
+            
+        Example:
+            >>> deleted_cell = notebook.delete_cell(5)
+            >>> print(f"Deleted cell type: {deleted_cell['cell_type']}")
+            >>> print(f"Deleted cell source: {deleted_cell['source']}")
+        """
+        if index < 0 or index >= len(self):
+            raise IndexError(f"Index {index} is out of range")
+        raw_ycell = self._doc.ycells[index]
+        with self._lock:
+            cell = raw_ycell.to_py().copy()
+            del self._doc.ycells[index]
+        nbcell = NotebookNode(**cell)
+        return nbcell
 
     def _fix_model(self) -> None:
         """Fix the model to set mandatory notebook attributes."""
