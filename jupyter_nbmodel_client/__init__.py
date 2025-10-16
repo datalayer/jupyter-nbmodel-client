@@ -7,7 +7,6 @@
 from nbformat import NotebookNode
 
 from jupyter_nbmodel_client._version import VERSION as __version__  # noqa: N811
-from jupyter_nbmodel_client.agent import AIMessageType, BaseNbAgent
 from jupyter_nbmodel_client.client import NbModelClient
 from jupyter_nbmodel_client.helpers import (
     get_notebook_websocket_url,
@@ -19,7 +18,6 @@ from jupyter_nbmodel_client.model import KernelClient, NotebookModel
 
 __all__ = [
     "AIMessageType",
-    "BaseNbAgent",
     "KernelClient",
     "NbModelClient",
     "NotebookModel",
