@@ -537,6 +537,56 @@ class NotebookModel(MutableSequence):
         nbcell = NotebookNode(**cell)
         return nbcell
 
+    def delete_many_cells(self, index_list: list[int]) -> list[NotebookNode]:
+        """Delete multiple cells at the specified indices and return their contents
+        
+        This method handles the deletion of multiple cells efficiently by:
+        1. Storing cell contents before deletion
+        2. Deleting cells in reverse order to avoid index offset issues
+        3. Returning deleted cells in the original index order
+        
+        Args:
+            index_list: List of cell indices (0-based) to delete
+            
+        Returns:
+            List of deleted cell contents (NotebookNode objects) in the same order as input indices
+            
+        Raises:
+            IndexError: When any index in index_list is out of range
+            
+        Example:
+            >>> # Delete cells at indices 2, 5, and 3
+            >>> deleted_cells = notebook.delete_many_cells([2, 5, 3])
+            >>> for i, cell in enumerate(deleted_cells):
+            ...     print(f"Deleted cell {i}: type={cell['cell_type']}, source={cell['source'][:20]}...")
+        """
+        # Validate all indices first
+        if len(index_list) == 0:
+            return []
+        notebook_length = len(self)
+        for index in index_list:
+            if index < 0 or index >= notebook_length:
+                raise IndexError(f"Index {index} is out of range")
+        
+        # Store all cell contents before deletion
+        deleted_cells = []
+        for index in index_list:
+            raw_ycell = self._doc.ycells[index]
+            with self._lock:
+                cell = raw_ycell.to_py().copy()
+            nbcell = NotebookNode(**cell)
+            deleted_cells.append(nbcell)
+        
+        # Delete cells in reverse order to avoid index offset issues
+        sorted_indices = sorted(index_list, reverse=True)
+        with self._lock:
+            with self._doc._ydoc.transaction(origin=self._changes_origin):
+                for index in sorted_indices:
+                    del self._doc.ycells[index]
+        
+        # Return deleted cells in the original order
+        return deleted_cells
+
     def _fix_model(self) -> None:
         """Fix the model to set mandatory notebook attributes."""
         with self._lock:
