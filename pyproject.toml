@@ -22,7 +22,7 @@ classifiers = [
   "Framework :: Jupyter",
 ]
 dependencies = [
-  "jupyter_ydoc==3.0.5",
+  "jupyter_ydoc==3.1.0",
   "nbformat>=5.10.4",
   "datalayer-pycrdt==0.12.17",
   "requests",
@@ -33,7 +33,7 @@ dependencies = [
 test = [
   "ipykernel",
   "jupyter-kernel-client",
-  "jupyter-server-ydoc==2.0.2",
+  "jupyter-server-ydoc==2.1.1",
   "pytest>=7.0",
   "pytest-asyncio",
   "pytest-timeout",
