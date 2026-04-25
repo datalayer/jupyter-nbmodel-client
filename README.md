@@ -152,7 +152,7 @@ finally:
 
 ## Usage with Datalayer
 
-To connect to a [Datalayer collaborative room](https://docs.datalayer.app/platform#notebook-editor), you can use the helper function `get_datalayer_notebook_websocket_url`:
+To connect to a Datalayer collaborative room, you can use the helper function `get_datalayer_notebook_websocket_url`:
 
 - The `server` is `https://prod1.datalayer.run` for the Datalayer production SaaS.
 - The `room_id` is the id of your notebook shown in the URL browser bar.
