@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 from pycrdt import (
     Awareness,
-    TransactionEvent,
+#    TransactionEvent,
     YMessageType,
     YSyncMessageType,
     create_awareness_message,
@@ -33,9 +33,11 @@ from jupyter_nbmodel_client.model import NotebookModel
 WEBSOCKETS_MAX_BODY_SIZE = int(os.environ.get("WEBSOCKETS_MAX_BODY_SIZE", 16 * 1024 * 1024))
 
 
+# We need https://github.com/y-crdt/pycrdt/pull/266 to type with TransactionEvent instead of Any.
 def _on_doc_update(
     queue: asyncio.Queue,
-    event: TransactionEvent,
+#    event: TransactionEvent,
+    event: Any,
 ) -> None:
     message = create_update_message(event.update)
     queue.put_nowait(message)
