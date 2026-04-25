@@ -2,4 +2,4 @@
 #
 # BSD 3-Clause License
 
-VERSION = "0.14.6"
+VERSION = "0.14.7"

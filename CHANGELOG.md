@@ -8,6 +8,25 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## 0.14.7
+
+([Full Changelog](https://github.com/datalayer/jupyter-nbmodel-client/compare/v0.14.6...71937f2ee0f7aa692ed2803c3c4f9355f1ffa49e))
+
+### Merged PRs
+
+- fix: readme [#60](https://github.com/datalayer/jupyter-nbmodel-client/pull/60) ([@echarles](https://github.com/echarles))
+
+### Contributors to this release
+
+The following people contributed discussions, new ideas, code and documentation contributions, and review.
+See [our definition of contributors](https://github-activity.readthedocs.io/en/latest/use/#how-does-this-tool-define-contributions-in-the-reports).
+
+([GitHub contributors page for this release](https://github.com/datalayer/jupyter-nbmodel-client/graphs/contributors?from=2026-04-25&to=2026-04-25&type=c))
+
+@echarles ([activity](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Aecharles+updated%3A2026-04-25..2026-04-25&type=Issues))
+
+<!-- <END NEW CHANGELOG ENTRY> -->
+
 ## 0.14.6
 
 ([Full Changelog](https://github.com/datalayer/jupyter-nbmodel-client/compare/v0.14.5...0fc002aea57dd581e284835828e590f3c965689d))
@@ -24,8 +43,6 @@ See [our definition of contributors](https://github-activity.readthedocs.io/en/l
 ([GitHub contributors page for this release](https://github.com/datalayer/jupyter-nbmodel-client/graphs/contributors?from=2026-04-25&to=2026-04-25&type=c))
 
 @echarles ([activity](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Aecharles+updated%3A2026-04-25..2026-04-25&type=Issues))
-
-<!-- <END NEW CHANGELOG ENTRY> -->
 
 ## 0.14.5
 
