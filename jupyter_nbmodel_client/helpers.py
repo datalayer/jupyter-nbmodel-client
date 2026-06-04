@@ -18,6 +18,7 @@ def get_notebook_websocket_url(
     token: str | None = None,
     timeout: float = REQUEST_TIMEOUT,
     log: logging.Logger | None = None,
+    headers: dict[str, str] | None = None,
 ) -> str:
     """Get the websocket endpoint to connect to a collaborative Jupyter notebook.
 
@@ -28,17 +29,19 @@ def get_notebook_websocket_url(
         token: [optional] Jupyter Server authentication token; default None
         timeout: [optional] Request timeout in seconds; default to environment variable REQUEST_TIMEOUT
         log: [optional] Custom logger; default local logger
+        headers: [optional] Extra HTTP headers for the session request, e.g. Cookie and
+            X-XSRFToken for cookie/XSRF-protected servers; default None
 
     Returns:
         The websocket endpoint
     """
     if provider == "jupyter":
         return get_jupyter_notebook_websocket_url(
-            server_url, path, token, timeout, log
+            server_url, path, token, timeout, log, headers
         )
     elif provider == "datalayer":
         return get_datalayer_notebook_websocket_url(
-            server_url, path, token, timeout, log
+            server_url, path, token, timeout, log, headers
         )
 
 
@@ -48,6 +51,7 @@ def get_jupyter_notebook_websocket_url(
     token: str | None = None,
     timeout: float = REQUEST_TIMEOUT,
     log: logging.Logger | None = None,
+    headers: dict[str, str] | None = None,
 ) -> str:
     """Get the websocket endpoint to connect to a collaborative Jupyter notebook.
 
@@ -57,6 +61,8 @@ def get_jupyter_notebook_websocket_url(
         token: [optional] Jupyter Server authentication token; default None
         timeout: [optional] Request timeout in seconds; default to environment variable REQUEST_TIMEOUT
         log: [optional] Custom logger; default local logger
+        headers: [optional] Extra HTTP headers for the session request, e.g. Cookie and
+            X-XSRFToken for cookie/XSRF-protected servers; default None
 
     Returns:
         The websocket endpoint
@@ -69,6 +75,7 @@ def get_jupyter_notebook_websocket_url(
         method="PUT",
         json={"format": "json", "type": "notebook"},
         timeout=timeout,
+        headers=headers,
     )
 
     response.raise_for_status()
@@ -91,6 +98,7 @@ def get_datalayer_notebook_websocket_url(
     token: str | None = None,
     timeout: float = REQUEST_TIMEOUT,
     log: logging.Logger | None = None,
+    headers: dict[str, str] | None = None,
 ) -> str:
     """Get the websocket endpoint to connect to a collaborative notebook
     on Datalayer spacer.
@@ -101,6 +109,8 @@ def get_datalayer_notebook_websocket_url(
         token: [optional] Datalayer Server JWT authentication token; default None
         timeout: [optional] Request timeout in seconds; default to environment variable REQUEST_TIMEOUT
         log: [optional] Custom logger; default local logger
+        headers: [optional] Extra HTTP headers for the session request, e.g. Cookie and
+            X-XSRFToken for cookie/XSRF-protected servers; default None
 
     Returns:
         The websocket endpoint
@@ -113,6 +123,7 @@ def get_datalayer_notebook_websocket_url(
         token,
         method="GET",
         timeout=timeout,
+        headers=headers,
     )
 
     response.raise_for_status()

@@ -2,7 +2,64 @@
 #
 # BSD 3-Clause License
 
+import jupyter_nbmodel_client.client as nbmodel_client_module
 from jupyter_nbmodel_client import NbModelClient, get_jupyter_notebook_websocket_url
+
+
+async def test_additional_headers__forwarded_to_websocket_connect(
+    jupyter_server, notebook_factory, monkeypatch
+):
+    """Headers passed to NbModelClient are forwarded to the websocket handshake.
+
+    This is what lets callers authenticate cookie/XSRF-protected Jupyter servers
+    without monkey-patching the module-level ``connect`` function.
+    """
+    server_url, token = jupyter_server
+    path = "test_headers.ipynb"
+
+    notebook_factory(path)
+
+    forwarded_headers: list[dict[str, str] | None] = []
+    real_connect = nbmodel_client_module.connect
+
+    async def capturing_connect(*args, **kwargs):
+        forwarded_headers.append(kwargs.get("additional_headers"))
+        return await real_connect(*args, **kwargs)
+
+    monkeypatch.setattr(nbmodel_client_module, "connect", capturing_connect)
+
+    additional_headers = {"X-Test-Header": "nbmodel"}
+    async with NbModelClient(
+        get_jupyter_notebook_websocket_url(server_url=server_url, path=path, token=token),
+        additional_headers=additional_headers,
+    ) as notebook:
+        assert notebook.synced
+
+    assert forwarded_headers == [additional_headers]
+
+
+async def test_additional_headers__defaults_to_none(jupyter_server, notebook_factory, monkeypatch):
+    """When no headers are provided, None is forwarded (unchanged default behaviour)."""
+    server_url, token = jupyter_server
+    path = "test_no_headers.ipynb"
+
+    notebook_factory(path)
+
+    forwarded_headers: list[dict[str, str] | None] = []
+    real_connect = nbmodel_client_module.connect
+
+    async def capturing_connect(*args, **kwargs):
+        forwarded_headers.append(kwargs.get("additional_headers"))
+        return await real_connect(*args, **kwargs)
+
+    monkeypatch.setattr(nbmodel_client_module, "connect", capturing_connect)
+
+    async with NbModelClient(
+        get_jupyter_notebook_websocket_url(server_url=server_url, path=path, token=token)
+    ) as notebook:
+        assert notebook.synced
+
+    assert forwarded_headers == [None]
 
 
 async def test_create_notebook_context_manager(jupyter_server, notebook_factory):

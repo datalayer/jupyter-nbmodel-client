@@ -38,13 +38,15 @@ def fetch(
     """Fetch a network resource as a context manager."""
     method = kwargs.pop("method", "GET")
     f = getattr(requests, method.lower())
-    headers = kwargs.pop("headers", {})
-    if len(headers) == 0:
-        headers = {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "User-Agent": "Jupyter Nbmodel Client",
-        }
+    # Start from the JSON defaults and let caller-supplied headers override them, so extra
+    # headers (e.g. Cookie/X-XSRFToken for cookie-protected servers) can be added without
+    # dropping the defaults.
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "Jupyter Nbmodel Client",
+    }
+    headers.update(kwargs.pop("headers", None) or {})
     if token:
         headers["Authorization"] = f"Bearer {token}"
     if "timeout" not in kwargs:
