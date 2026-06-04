@@ -118,6 +118,9 @@ class NbModelClient(NotebookModel):
         log: [optional] Custom logger; default local logger
         ws_max_body_size: [optional] Maximum WebSocket body size in bytes; default 16MB
         close_timeout: [optional] Timeout for propagating final changes on close; default to timeout value
+        additional_headers: [optional] Extra HTTP headers to send during the WebSocket
+            handshake, e.g. ``Cookie`` and ``X-XSRFToken`` for cookie/XSRF-protected
+            Jupyter servers; default None
 
     Examples:
 
@@ -161,6 +164,7 @@ class NbModelClient(NotebookModel):
         log: logging.Logger | None = None,
         ws_max_body_size: int | None = None,
         close_timeout: float | None = None,
+        additional_headers: dict[str, str] | None = None,
     ) -> None:
         super().__init__()
         self._ws_url = websocket_url
@@ -170,6 +174,7 @@ class NbModelClient(NotebookModel):
         self._log = log or DEFAULT_LOGGER
         self._ws_max_body_size = ws_max_body_size or WEBSOCKETS_MAX_BODY_SIZE
         self._close_timeout = close_timeout if close_timeout is not None else timeout
+        self._additional_headers = additional_headers
 
         self.__synced = asyncio.Event()
         self.__run: asyncio.Task | None = None
@@ -225,6 +230,7 @@ class NbModelClient(NotebookModel):
             user_agent_header="Jupyter NbModel Client",
             logger=self._log,
             max_size=self._ws_max_body_size,
+            additional_headers=self._additional_headers,
         )
         messages_queue: asyncio.Queue[bytes] = asyncio.Queue()
 
