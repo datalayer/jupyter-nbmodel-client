@@ -8,6 +8,25 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## 0.14.9
+
+([Full Changelog](https://github.com/datalayer/jupyter-nbmodel-client/compare/v0.14.8...e370ef717d445bbfc4f1190d8acb50121761bf35))
+
+### Merged PRs
+
+- fix: do not save transient information in the document [#63](https://github.com/datalayer/jupyter-nbmodel-client/pull/63) ([@ebarkhordar](https://github.com/ebarkhordar), [@echarles](https://github.com/echarles))
+
+### Contributors to this release
+
+The following people contributed discussions, new ideas, code and documentation contributions, and review.
+See [our definition of contributors](https://github-activity.readthedocs.io/en/latest/use/#how-does-this-tool-define-contributions-in-the-reports).
+
+([GitHub contributors page for this release](https://github.com/datalayer/jupyter-nbmodel-client/graphs/contributors?from=2026-06-04&to=2026-07-17&type=c))
+
+@ebarkhordar ([activity](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Aebarkhordar+updated%3A2026-06-04..2026-07-17&type=Issues)) | @echarles ([activity](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Aecharles+updated%3A2026-06-04..2026-07-17&type=Issues))
+
+<!-- <END NEW CHANGELOG ENTRY> -->
+
 ## 0.14.8
 
 ([Full Changelog](https://github.com/datalayer/jupyter-nbmodel-client/compare/v0.14.7...efa659f2adebb8be9aaa48cc353d32e9c9d30be0))
@@ -24,8 +43,6 @@ See [our definition of contributors](https://github-activity.readthedocs.io/en/l
 ([GitHub contributors page for this release](https://github.com/datalayer/jupyter-nbmodel-client/graphs/contributors?from=2026-04-25&to=2026-06-04&type=c))
 
 @claude ([activity](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Aclaude+updated%3A2026-04-25..2026-06-04&type=Issues)) | @echarles ([activity](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3Aecharles+updated%3A2026-04-25..2026-06-04&type=Issues)) | @EnyMan ([activity](https://github.com/search?q=repo%3Adatalayer%2Fjupyter-nbmodel-client+involves%3AEnyMan+updated%3A2026-04-25..2026-06-04&type=Issues))
-
-<!-- <END NEW CHANGELOG ENTRY> -->
 
 ## 0.14.7
 
