@@ -90,6 +90,23 @@ class KernelClient(t.Protocol):
         ...
 
 
+def _persistable_output(output: dict[str, t.Any]) -> dict[str, t.Any]:
+    """Copy an output without the kernel protocol fields absent from the nbformat schema.
+
+    ``transient`` is part of the kernel messaging protocol, not of the notebook format; see
+    https://jupyter-client.readthedocs.io/en/stable/messaging.html#display-data. It must be
+    kept in ``outputs`` for ``update_display_data`` matching, but a document may only contain
+    schema-valid outputs.
+
+    Args:
+        output: The output to copy
+
+    Returns:
+        The output without its transient information
+    """
+    return {key: value for key, value in output.items() if key != "transient"}
+
+
 def save_in_notebook_hook(
     lock: threading.Lock, outputs: list[dict], ycell: pycrdt.Map, origin: int, msg: dict
 ) -> None:
@@ -107,15 +124,15 @@ def save_in_notebook_hook(
         with lock:
             with cell_outputs.doc.transaction(origin=origin):
                 cell_outputs.clear()
-                cell_outputs.extend(outputs)
+                cell_outputs.extend(map(_persistable_output, outputs))
     else:
         with lock:
             with cell_outputs.doc.transaction(origin=origin):
                 for index in indexes:
                     if index >= len(cell_outputs):
-                        cell_outputs.append(outputs[index])
+                        cell_outputs.append(_persistable_output(outputs[index]))
                     else:
-                        cell_outputs[index] = outputs[index]
+                        cell_outputs[index] = _persistable_output(outputs[index])
 
 
 class NotebookModel(MutableSequence):
