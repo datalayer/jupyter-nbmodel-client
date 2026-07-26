@@ -120,6 +120,7 @@ with JupyterKernelClient(server_url="http://localhost:8888", token="MY_TOKEN") a
 > Instead of using the nbmodel clients as context manager, you can call the `start()` and `stop()` methods.
 
 ```py
+from jupyter_kernel_client import JupyterKernelClient
 from jupyter_nbmodel_client import NbModelClient, get_jupyter_notebook_websocket_url
 
 kernel = JupyterKernelClient(server_url="http://localhost:8888", token="MY_TOKEN")
