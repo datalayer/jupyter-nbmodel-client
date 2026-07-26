@@ -8,6 +8,10 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## 1.5.0
+
+- Replace local `KernelClient` protocol with `JupyterKernelClient` typing from `jupyter-kernel-client`.
+
 ## 0.14.9
 
 ([Full Changelog](https://github.com/datalayer/jupyter-nbmodel-client/compare/v0.14.8...e370ef717d445bbfc4f1190d8acb50121761bf35))

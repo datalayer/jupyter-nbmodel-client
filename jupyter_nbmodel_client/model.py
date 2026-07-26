@@ -17,6 +17,9 @@ import pycrdt
 from jupyter_ydoc import YNotebook
 from nbformat import NotebookNode, current_nbformat, versions
 
+if t.TYPE_CHECKING:
+    from jupyter_kernel_client import JupyterKernelClient
+
 current_api = versions[current_nbformat]
 
 try:
@@ -44,50 +47,6 @@ except ImportError:
             return set(range(size))
 
         return set()
-
-
-class KernelClient(t.Protocol):
-    """Interface to be implemented by the kernel client."""
-
-    def execute_interactive(
-        self,
-        code: str,
-        silent: bool = False,
-        store_history: bool = True,
-        user_expressions: dict[str, t.Any] | None = None,
-        allow_stdin: bool | None = None,
-        stop_on_error: bool = True,
-        timeout: float | None = None,
-        output_hook: t.Callable | None = None,
-        stdin_hook: t.Callable | None = None,
-    ) -> dict[str, t.Any]:
-        """Execute code in the kernel with low-level API
-
-        Args:
-            code: A string of code in the kernel's language.
-            silent: optional (default False)
-                If set, the kernel will execute the code as quietly possible, and
-                will force store_history to be False.
-            store_history: optional (default True)
-                If set, the kernel will store command history.  This is forced
-                to be False if silent is True.
-            user_expressions: optional
-                A dict mapping names to expressions to be evaluated in the user's
-                dict. The expression values are returned as strings formatted using
-                :func:`repr`.
-            allow_stdin: optional (default self.allow_stdin)
-                Flag for whether the kernel can send stdin requests to frontends.
-            stop_on_error: optional (default True)
-                Flag whether to abort the execution queue, if an exception is encountered.
-            timeout: (default None)
-                Timeout to use when waiting for a reply
-            output_hook: Function to be called with output messages.
-            stdin_hook: Function to be called with stdin_request messages.
-
-        Returns:
-            The reply message for this request
-        """
-        ...
 
 
 def _persistable_output(output: dict[str, t.Any]) -> dict[str, t.Any]:
@@ -335,7 +294,7 @@ class NotebookModel(MutableSequence):
     def execute_cell(
         self,
         index: int,
-        kernel_client: KernelClient,
+        kernel_client: JupyterKernelClient,
         silent: bool = False,
         store_history: bool = True,
         stop_on_error: bool = True,

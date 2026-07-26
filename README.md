@@ -56,10 +56,10 @@ async with NbModelClient(ws_url) as nbmodel:
 5. The previous example does not involve kernels. Put that now in the picture, adding a cell and executing the cell code within a kernel process.
 
 ```py
-from jupyter_kernel_client import KernelClient
+from jupyter_kernel_client import JupyterKernelClient
 from jupyter_nbmodel_client import NbModelClient, get_jupyter_notebook_websocket_url
 
-with KernelClient(server_url="http://localhost:8888", token="MY_TOKEN") as kernel:
+with JupyterKernelClient(server_url="http://localhost:8888", token="MY_TOKEN") as kernel:
     ws_url = get_jupyter_notebook_websocket_url(
         server_url="http://localhost:8888",
         token="MY_TOKEN",
@@ -78,7 +78,7 @@ with KernelClient(server_url="http://localhost:8888", token="MY_TOKEN") as kerne
 You can go further and create a plot with eg matplotlib.
 
 ```py
-from jupyter_kernel_client import KernelClient
+from jupyter_kernel_client import JupyterKernelClient
 from jupyter_nbmodel_client import NbModelClient, get_jupyter_notebook_websocket_url
 
 CODE = """import matplotlib.pyplot as plt
@@ -99,7 +99,7 @@ ax.legend(title='Fruit color')
 plt.show()
 """
 
-with KernelClient(server_url="http://localhost:8888", token="MY_TOKEN") as kernel:
+with JupyterKernelClient(server_url="http://localhost:8888", token="MY_TOKEN") as kernel:
     ws_url = get_jupyter_notebook_websocket_url(
         server_url="http://localhost:8888",
         token="MY_TOKEN",
@@ -120,9 +120,10 @@ with KernelClient(server_url="http://localhost:8888", token="MY_TOKEN") as kerne
 > Instead of using the nbmodel clients as context manager, you can call the `start()` and `stop()` methods.
 
 ```py
+from jupyter_kernel_client import JupyterKernelClient
 from jupyter_nbmodel_client import NbModelClient, get_jupyter_notebook_websocket_url
 
-kernel = KernelClient(server_url="http://localhost:8888", token="MY_TOKEN")
+kernel = JupyterKernelClient(server_url="http://localhost:8888", token="MY_TOKEN")
 kernel.start()
 
 try:

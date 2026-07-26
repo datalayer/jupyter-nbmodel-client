@@ -13,12 +13,11 @@ from jupyter_nbmodel_client.helpers import (
     get_datalayer_notebook_websocket_url,
     get_jupyter_notebook_websocket_url,
 )
-from jupyter_nbmodel_client.model import KernelClient, NotebookModel
+from jupyter_nbmodel_client.model import NotebookModel
 
 
 __all__ = [
     "AIMessageType",
-    "KernelClient",
     "NbModelClient",
     "NotebookModel",
     "NotebookNode",
