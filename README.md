@@ -11,7 +11,7 @@
 
 [![PyPI - Version](https://img.shields.io/pypi/v/jupyter-nbmodel-client?style=for-the-badge&logo=pypi&logoColor=white)](https://pypi.org/project/jupyter-nbmodel-client) [![Total PyPI downloads](https://img.shields.io/pepy/dt/jupyter-nbmodel-client?style=for-the-badge&logo=python&logoColor=white)](https://pepy.tech/project/jupyter-nbmodel-client) [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue?style=for-the-badge&logo=open-source-initiative&logoColor=white)](https://opensource.org/licenses/BSD-3-Clause)
 
-# 🪐 📄 Jupyter NbModel Client
+# 🪐 📄 Jupyter Nbmodel Client
 
 [![Github Actions Status](https://github.com/datalayer/jupyter-nbmodel-client/workflows/Build/badge.svg)](https://github.com/datalayer/jupyter-nbmodel-client/actions/workflows/build.yml)
 [![PyPI - Version](https://img.shields.io/pypi/v/jupyter-nbmodel-client)](https://pypi.org/project/jupyter-nbmodel-client)
