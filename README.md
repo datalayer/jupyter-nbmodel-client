@@ -4,14 +4,48 @@
   ~ BSD 3-Clause License
 -->
 
-[![Datalayer](https://assets.datalayer.tech/datalayer-25.svg)](https://datalayer.io)
+<a href="https://datalayer.ai"><img alt="Datalayer" src="https://assets.datalayer.tech/datalayer-25.svg" height="22"/></a>
 
 [![Become a Sponsor](https://img.shields.io/static/v1?label=Become%20a%20Sponsor&message=%E2%9D%A4&logo=GitHub&style=flat&color=1ABC9C)](https://github.com/sponsors/datalayer)
+[![Github Actions Status](https://github.com/datalayer/jupyter-nbmodel-client/workflows/Build/badge.svg)](https://github.com/datalayer/jupyter-nbmodel-client/actions/workflows/build.yml)
+
+[![PyPI - Version](https://img.shields.io/pypi/v/jupyter-nbmodel-client?style=for-the-badge&logo=pypi&logoColor=white)](https://pypi.org/project/jupyter-nbmodel-client) [![Total PyPI downloads](https://img.shields.io/pepy/dt/jupyter-nbmodel-client?style=for-the-badge&logo=python&logoColor=white)](https://pepy.tech/project/jupyter-nbmodel-client) [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue?style=for-the-badge&logo=open-source-initiative&logoColor=white)](https://opensource.org/licenses/BSD-3-Clause)
 
 # 🪐 📄 Jupyter NbModel Client
 
 [![Github Actions Status](https://github.com/datalayer/jupyter-nbmodel-client/workflows/Build/badge.svg)](https://github.com/datalayer/jupyter-nbmodel-client/actions/workflows/build.yml)
 [![PyPI - Version](https://img.shields.io/pypi/v/jupyter-nbmodel-client)](https://pypi.org/project/jupyter-nbmodel-client)
+
+[![Built and maintained by Datalayer](https://img.shields.io/badge/Built%20and%20maintained%20by-Datalayer%20%C2%B7%20datalayer.ai-1ABC9C?style=for-the-badge&logo=jupyter&logoColor=white&labelColor=0E7C6B)](https://datalayer.ai)
+
+**Stop losing your outputs to session timeouts or network loss.**
+
+Your cells run on the server, so a reload, a closed laptop or a dropped connection no longer
+costs you an execution — and the outputs are still there when you come back.
+
+📖 [Documentation](https://jupyter-nbmodel-client.datalayer.tech) &nbsp;·&nbsp; 🔀 [Output reconciliation](https://jupyter-nbmodel-client.datalayer.tech/reconciliation) &nbsp;·&nbsp; 💬 [Community](https://jupyter-nbmodel-client.datalayer.tech/community)
+
+- **⚡ Durable execution** — a cell keeps running with no browser connected to it.
+- **🖥️ Terminal-faithful outputs** — progress bars overwrite their line, as they should.
+- **🤖 Agent ready** — a REST API to run cells and read outputs, so an agent works
+  from the same Notebook you do.
+
+[![HOT NEWS](https://img.shields.io/badge/%F0%9F%94%A5%20HOT%20NEWS-Hosted%20MCP%20is%20live-E74C3C?style=for-the-badge&labelColor=922B21)](https://jupyter-mcp-server.datalayer.tech/hosted)
+
+**Your agent can now reach these Notebooks without running anything.** Datalayer hosts a
+Jupyter MCP endpoint at **`https://mcp.datalayer.run/mcp`** — durable execution included, so a cell keeps running after the agent disconnects.
+
+[![Claude Code plugin](https://img.shields.io/badge/%F0%9F%A4%96%20Claude%20Code-plugin%20available-8E44AD?style=for-the-badge&labelColor=5B2C6F)](https://github.com/datalayer/jupyter-mcp-server/tree/main/ext/claude-plugin)
+ 
+Claude Code connects with one command through
+the [Datalayer plugin](https://github.com/datalayer/jupyter-mcp-server/tree/main/ext/claude-plugin).
+
+---
+
+**Free and open source, BSD 3-Clause** — install it in your own Jupyter, no account needed.
+Built and maintained by [**Datalayer**](https://datalayer.ai), where the same durable execution powers always-on Notebooks that humans and AI agents work in together.
+
+[![Install from PyPI](https://img.shields.io/badge/pip%20install-jupyter__nbmodel__client-306998?style=for-the-badge&logo=python&logoColor=white&labelColor=1E4064)](https://pypi.org/project/jupyter-nbmodel-client) [![Discover Datalayer](https://img.shields.io/badge/%E2%86%92%20Discover%20Datalayer-datalayer.ai-1ABC9C?style=for-the-badge&labelColor=0E7C6B)](https://datalayer.ai)
 
 `Jupyter NbModel Client` is a python library to interact with a live Jupyter Notebooks.
 
@@ -209,3 +243,15 @@ pip uninstall jupyter_nbmodel_client
 ### Packaging the library
 
 See [RELEASE](RELEASE.md)
+
+---
+
+<div align="center">
+
+**If this project is helpful to you, please give us a ⭐️**
+
+Made with ❤️ by [Datalayer](https://datalayer.ai)
+
+<img src="https://assets.datalayer.tech/datalayer-25.svg" alt="Datalayer Logo" width="200"/>
+
+</div>
