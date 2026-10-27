@@ -2,6 +2,9 @@
 #
 # BSD 3-Clause License
 
+import nbformat
+import pytest
+
 import jupyter_nbmodel_client.client as nbmodel_client_module
 from jupyter_nbmodel_client import NbModelClient, get_jupyter_notebook_websocket_url
 
@@ -420,3 +423,22 @@ async def test_insert_raw_cell(jupyter_server, notebook_factory):
         cell = notebook[0]
         assert cell["cell_type"] == "raw"
         assert cell["source"] == "Raw text content"
+
+
+async def test_start__raises_when_document_exceeds_max_body_size(jupyter_server, notebook_factory):
+    """A document too large for the websocket must raise instead of yielding an empty model."""
+    server_url, token = jupyter_server
+    path = "test_too_large.ipynb"
+
+    nb = nbformat.v4.new_notebook()
+    nb.cells.append(nbformat.v4.new_markdown_cell("x" * 64 * 1024))
+    notebook_factory(path, nbformat.writes(nb, version=4))
+
+    with pytest.raises(RuntimeError, match="WEBSOCKETS_MAX_BODY_SIZE") as exc_info:
+        async with NbModelClient(
+            get_jupyter_notebook_websocket_url(server_url=server_url, path=path, token=token),
+            ws_max_body_size=16 * 1024,
+        ):
+            pass
+
+    assert "1009" in str(exc_info.value)

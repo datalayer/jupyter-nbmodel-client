@@ -116,7 +116,8 @@ class NbModelClient(NotebookModel):
         username: [optional] Client user name; default to environment variable USER
         timeout: [optional] Request timeout in seconds; default to environment variable REQUEST_TIMEOUT
         log: [optional] Custom logger; default local logger
-        ws_max_body_size: [optional] Maximum WebSocket body size in bytes; default 16MB
+        ws_max_body_size: [optional] Maximum WebSocket message size in bytes; default to environment
+            variable WEBSOCKETS_MAX_BODY_SIZE or 16MB. A document larger than this fails to sync.
         close_timeout: [optional] Timeout for propagating final changes on close; default to timeout value
         additional_headers: [optional] Extra HTTP headers to send during the WebSocket
             handshake, e.g. ``Cookie`` and ``X-XSRFToken`` for cookie/XSRF-protected
@@ -395,7 +396,7 @@ class NbModelClient(NotebookModel):
         if self.__run is not None:
             raise RuntimeError("The client is already connected.")
 
-        self.__run = asyncio.create_task(self.run())
+        run = self.__run = asyncio.create_task(self.run())
 
         def callback(_: asyncio.Task) -> None:
             self.__run = None
@@ -403,12 +404,30 @@ class NbModelClient(NotebookModel):
         self.__run.add_done_callback(callback)
 
         self._log.debug("Waiting for model synchronization…")
-        try:
-            await asyncio.wait_for(self.__synced.wait(), REQUEST_TIMEOUT)
-        except asyncio.TimeoutError:
-            ...
-        if not self.synced:
-            self._log.warning("Document %s not yet synced.", self._path)
+        # Wait for the sync or for the connection to end, whichever comes first;
+        # a connection that dies before syncing would otherwise leave an empty model.
+        synced = asyncio.create_task(self.__synced.wait())
+        await asyncio.wait({synced, run}, timeout=self._timeout, return_when=asyncio.FIRST_COMPLETED)
+        if self.synced:
+            return
+
+        synced.cancel()
+        if run.done():
+            reason = run.exception() if not run.cancelled() else None
+        else:
+            reason = None
+            await self.stop()
+        emsg = f"Document {self._path} failed to sync"
+        if reason is None:
+            emsg += f" within {self._timeout} seconds."
+        else:
+            emsg += f": {reason!r}."
+        emsg += (
+            " If the document is large, raise the client's websocket message limit"
+            f" (currently {self._ws_max_body_size} bytes) with `ws_max_body_size` or"
+            " the WEBSOCKETS_MAX_BODY_SIZE environment variable."
+        )
+        raise RuntimeError(emsg) from reason
 
 
     async def stop(self) -> None:
